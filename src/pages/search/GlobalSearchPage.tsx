@@ -38,13 +38,13 @@ export function GlobalSearchPage() {
     const out: SearchResult[] = [];
 
     MOCK_MEETINGS.filter((m) => m.title.toLowerCase().includes(needle) || m.description.toLowerCase().includes(needle))
-      .forEach((m) => out.push({ kind: "meeting", id: m.id, title: m.title, snippet: m.description, date: m.meeting_date, meetingId: m.id }));
+      .forEach((m) => out.push({ kind: "meeting", id: m.id, title: m.title, snippet: m.description, date: m.meetingDate, meetingId: m.id }));
 
     MOCK_NOTES.filter((n) => n.content.toLowerCase().includes(needle))
-      .forEach((n) => out.push({ kind: "note", id: n.id, title: n.content.slice(0, 80), snippet: n.content, date: n.created_at, meetingId: n.meeting_id }));
+      .forEach((n) => out.push({ kind: "note", id: n.id, title: n.content.slice(0, 80), snippet: n.content, date: n.createdAt, meetingId: n.meetingId }));
 
-    MOCK_FOLLOWUPS.filter((f) => f.text.toLowerCase().includes(needle) || (f.responsible_person_name ?? "").toLowerCase().includes(needle))
-      .forEach((f) => out.push({ kind: "followup", id: f.id, title: f.text.slice(0, 80), snippet: f.text, date: f.due_date ?? f.created_at }));
+    MOCK_FOLLOWUPS.filter((f) => f.text.toLowerCase().includes(needle) || (f.responsiblePersonName ?? "").toLowerCase().includes(needle))
+      .forEach((f) => out.push({ kind: "followup", id: f.id, title: f.text.slice(0, 80), snippet: f.text, date: f.dueDate ?? f.createdAt }));
 
     return out;
   }, [query]);

@@ -4,7 +4,7 @@ export const APP_NAME = "Toplantı Yönetimi" as const;
 export const APP_VERSION = "1.0.0" as const;
 
 /** Default API base URL (proxied by Vite in dev). */
-export const API_BASE_URL = "/api/v1" as const;
+export const API_BASE_URL = "/api" as const;
 
 /** ── Pagination Defaults ────────────────────────── */
 export const DEFAULT_PAGE = 1 as const;

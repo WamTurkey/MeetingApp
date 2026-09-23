@@ -1,20 +1,19 @@
 import type { BaseEntity } from "@/shared/types/common";
 
 export interface Person extends BaseEntity {
-  full_name: string;
-  company_id: number | null;
-  company_name?: string;
+  fullName: string;
+  companyId: number | null;
+  companyName?: string;
   title: string;
   email: string;
   phone: string;
-  active: boolean;
+  isActive: boolean;
 }
 
 export interface PersonCreatePayload {
-  full_name: string;
-  company_id?: number | null;
+  fullName: string;
+  companyId?: number;
   title?: string;
   email?: string;
   phone?: string;
-  active?: boolean;
 }

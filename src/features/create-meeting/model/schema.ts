@@ -1,8 +1,8 @@
 /**
  * Zod validation schema for the Create Meeting form.
  *
- * Handles conditional validation (planned_start only required when
- * has_planned_start is true, next_meeting_at only when has_next_meeting
+ * Handles conditional validation (plannedStart only required when
+ * hasPlannedStart is true, next_meeting_at only when hasNextMeeting
  * is true, etc.)
  */
 import { z } from "zod";
@@ -15,46 +15,46 @@ export const createMeetingSchema = z
       .min(3, "Başlık en az 3 karakter olmalıdır")
       .max(500, "Başlık en fazla 500 karakter olabilir"),
     subject: z.string().default(""),
-    meeting_date: z.string().min(1, "Toplantı tarihi gereklidir"),
+    meetingDate: z.string().min(1, "Toplantı tarihi gereklidir"),
 
     // Conditional: planned start time
-    has_planned_start: z.boolean().default(false),
-    planned_start: z.string().nullable().default(null),
+    hasPlannedStart: z.boolean().default(false),
+    plannedStart: z.string().nullable().default(null),
 
     // Catalog FK references
-    category_id: z.coerce.number().nullable().default(null),
-    project_id: z.coerce.number().nullable().default(null),
-    company_id: z.coerce.number().nullable().default(null),
-    location_id: z.coerce.number().nullable().default(null),
+    categoryId: z.coerce.number().nullable().default(null),
+    projectId: z.coerce.number().nullable().default(null),
+    companyId: z.coerce.number().nullable().default(null),
+    locationId: z.coerce.number().nullable().default(null),
 
     // Conditional: next meeting
-    has_next_meeting: z.boolean().default(false),
-    next_meeting_date: z.string().nullable().default(null),
-    next_meeting_time: z.string().nullable().default(null),
-    next_meeting_note: z.string().default(""),
+    hasNextMeeting: z.boolean().default(false),
+    nextMeetingDate: z.string().nullable().default(null),
+    nextMeetingTime: z.string().nullable().default(null),
+    nextMeetingNote: z.string().default(""),
 
     // Previous meeting link
-    previous_meeting_id: z.coerce.number().nullable().default(null),
-    relation_type: z.enum(["FOLLOW_UP", "CONTINUATION"]).default("FOLLOW_UP"),
+    previousMeetingId: z.coerce.number().nullable().default(null),
+    relationType: z.enum(["FOLLOW_UP", "CONTINUATION"]).default("FOLLOW_UP"),
     copy_participants: z.boolean().default(true),
-    copy_open_tasks: z.boolean().default(true),
+    copyOpenTasks: z.boolean().default(true),
   })
   .refine(
     (d) =>
-      !d.has_planned_start ||
-      (d.planned_start != null && d.planned_start.length > 0),
+      !d.hasPlannedStart ||
+      (d.plannedStart != null && d.plannedStart.length > 0),
     {
       message: "Saat belirle seçildiyse planlanan saat zorunludur",
-      path: ["planned_start"],
+      path: ["plannedStart"],
     },
   )
   .refine(
     (d) =>
-      !d.has_next_meeting ||
-      (d.next_meeting_date != null && d.next_meeting_date.length > 0),
+      !d.hasNextMeeting ||
+      (d.nextMeetingDate != null && d.nextMeetingDate.length > 0),
     {
       message: "Sonraki toplantı tarihi gereklidir",
-      path: ["next_meeting_date"],
+      path: ["nextMeetingDate"],
     },
   );
 
@@ -65,27 +65,27 @@ export type CreateMeetingFormData = z.infer<typeof createMeetingSchema>;
  */
 export function toMeetingPayload(data: CreateMeetingFormData) {
   const nextAt =
-    data.has_next_meeting && data.next_meeting_date
-      ? data.next_meeting_time
-        ? `${data.next_meeting_date}T${data.next_meeting_time}`
-        : data.next_meeting_date
+    data.hasNextMeeting && data.nextMeetingDate
+      ? data.nextMeetingTime
+        ? `${data.nextMeetingDate}T${data.nextMeetingTime}`
+        : data.nextMeetingDate
       : null;
 
   return {
     title: data.title,
     subject: data.subject || undefined,
-    meeting_date: data.meeting_date,
-    planned_start: data.has_planned_start ? data.planned_start : null,
-    category_id: data.category_id || null,
-    project_id: data.project_id || null,
-    company_id: data.company_id || null,
-    location_id: data.location_id || null,
+    meetingDate: data.meetingDate,
+    plannedStart: data.hasPlannedStart ? data.plannedStart : null,
+    categoryId: data.categoryId || null,
+    projectId: data.projectId || null,
+    companyId: data.companyId || null,
+    locationId: data.locationId || null,
     next_meeting_at: nextAt,
-    next_meeting_note: data.next_meeting_note || undefined,
-    previous_meeting_id: data.previous_meeting_id || null,
-    relation_type: data.previous_meeting_id ? data.relation_type : undefined,
+    nextMeetingNote: data.nextMeetingNote || undefined,
+    previousMeetingId: data.previousMeetingId || null,
+    relationType: data.previousMeetingId ? data.relationType : undefined,
     copy_participants:
-      data.previous_meeting_id ? data.copy_participants : false,
-    copy_open_tasks: data.previous_meeting_id ? data.copy_open_tasks : false,
+      data.previousMeetingId ? data.copy_participants : false,
+    copyOpenTasks: data.previousMeetingId ? data.copyOpenTasks : false,
   };
 }

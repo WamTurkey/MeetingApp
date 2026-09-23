@@ -66,21 +66,21 @@ export function CreateMeetingModal({
     defaultValues: {
       title: "",
       subject: "",
-      meeting_date: "",
-      has_planned_start: false,
-      planned_start: "",
-      category_id: null,
-      project_id: null,
-      company_id: null,
-      location_id: null,
-      has_next_meeting: false,
-      next_meeting_date: "",
-      next_meeting_time: "",
-      next_meeting_note: "",
-      previous_meeting_id: null,
-      relation_type: "FOLLOW_UP",
+      meetingDate: "",
+      hasPlannedStart: false,
+      plannedStart: "",
+      categoryId: null,
+      projectId: null,
+      companyId: null,
+      locationId: null,
+      hasNextMeeting: false,
+      nextMeetingDate: "",
+      nextMeetingTime: "",
+      nextMeetingNote: "",
+      previousMeetingId: null,
+      relationType: "FOLLOW_UP",
       copy_participants: true,
-      copy_open_tasks: true,
+      copyOpenTasks: true,
     },
   });
 
@@ -93,14 +93,14 @@ export function CreateMeetingModal({
   const [showAdvanced, setShowAdvanced] = useState(false);
 
   // ── Watched values ────────────────────────────────
-  const hasPlannedStart = watch("has_planned_start");
-  const hasNextMeeting = watch("has_next_meeting");
-  const previousMeetingId = watch("previous_meeting_id");
+  const hasPlannedStart = watch("hasPlannedStart");
+  const hasNextMeeting = watch("hasNextMeeting");
+  const previousMeetingId = watch("previousMeetingId");
 
   // Previous meetings list for dropdown
   const previousMeetingOptions = MOCK_MEETINGS.map((m) => ({
     value: m.id,
-    label: `${m.meeting_date} · #${m.id} · ${m.title}`,
+    label: `${m.meetingDate} · #${m.id} · ${m.title}`,
   }));
 
   // Reset form on close
@@ -120,10 +120,10 @@ export function CreateMeetingModal({
   // ── Catalog modal helpers ─────────────────────────
   function handleCatalogCreated(kind: CatalogKind, id: number) {
     const fieldMap: Record<CatalogKind, keyof CreateMeetingFormData> = {
-      categories: "category_id",
-      projects: "project_id",
-      companies: "company_id",
-      locations: "location_id",
+      categories: "categoryId",
+      projects: "projectId",
+      companies: "companyId",
+      locations: "locationId",
     };
     setValue(fieldMap[kind], id as never);
     setActiveCatalog(null);
@@ -171,14 +171,14 @@ export function CreateMeetingModal({
             </h3>
             <div className="grid gap-4 sm:grid-cols-1">
               <Controller
-                name="meeting_date"
+                name="meetingDate"
                 control={control}
                 render={({ field }) => (
                   <DatePicker
                     label="Toplantı Tarihi *"
                     value={field.value}
                     onChange={field.onChange}
-                    error={errors.meeting_date?.message}
+                    error={errors.meetingDate?.message}
                     disabled={isLoading}
                   />
                 )}
@@ -186,7 +186,7 @@ export function CreateMeetingModal({
 
               <div className="space-y-2">
                 <Controller
-                  name="has_planned_start"
+                  name="hasPlannedStart"
                   control={control}
                   render={({ field }) => (
                     <Checkbox
@@ -199,13 +199,13 @@ export function CreateMeetingModal({
                 />
                 {hasPlannedStart && (
                   <Controller
-                    name="planned_start"
+                    name="plannedStart"
                     control={control}
                     render={({ field }) => (
                       <TimePicker
                         value={field.value}
                         onChange={field.onChange}
-                        error={errors.planned_start?.message}
+                        error={errors.plannedStart?.message}
                         disabled={isLoading}
                       />
                     )}
@@ -224,7 +224,7 @@ export function CreateMeetingModal({
             <div className="grid gap-4 sm:grid-cols-1">
               
               <Controller
-                name="project_id"
+                name="projectId"
                 control={control}
                 render={({ field }) => (
                   <ComboBox
@@ -240,7 +240,7 @@ export function CreateMeetingModal({
                 )}
               />
               <Controller
-                name="company_id"
+                name="companyId"
                 control={control}
                 render={({ field }) => (
                   <ComboBox
@@ -256,7 +256,7 @@ export function CreateMeetingModal({
                 )}
               />
               <Controller
-                name="location_id"
+                name="locationId"
                 control={control}
                 render={({ field }) => (
                   <ComboBox
@@ -297,7 +297,7 @@ export function CreateMeetingModal({
                 {/* Next meeting */}
                 <div className="rounded-lg border border-surface-200 bg-surface-50/50 p-4 dark:border-surface-700 dark:bg-surface-900/30">
                   <Controller
-                    name="has_next_meeting"
+                    name="hasNextMeeting"
                     control={control}
                     render={({ field }) => (
                       <Checkbox
@@ -312,20 +312,20 @@ export function CreateMeetingModal({
                   {hasNextMeeting && (
                     <div className="mt-3 grid gap-3 sm:grid-cols-2">
                       <Controller
-                        name="next_meeting_date"
+                        name="nextMeetingDate"
                         control={control}
                         render={({ field }) => (
                           <DatePicker
                             label="Sonraki Toplantı Tarihi"
                             value={field.value ?? ""}
                             onChange={field.onChange}
-                            error={errors.next_meeting_date?.message}
+                            error={errors.nextMeetingDate?.message}
                             disabled={isLoading}
                           />
                         )}
                       />
                       <Controller
-                        name="next_meeting_time"
+                        name="nextMeetingTime"
                         control={control}
                         render={({ field }) => (
                           <TimePicker
@@ -340,7 +340,7 @@ export function CreateMeetingModal({
                         <Input
                           label="Sonraki Toplantı Notu"
                           placeholder="Örn: Revize teklifler değerlendirilecek..."
-                          {...register("next_meeting_note")}
+                          {...register("nextMeetingNote")}
                           disabled={isLoading}
                         />
                       </div>
@@ -356,7 +356,7 @@ export function CreateMeetingModal({
                   </h4>
                   <div className="space-y-3">
                     <Controller
-                      name="previous_meeting_id"
+                      name="previousMeetingId"
                       control={control}
                       render={({ field }) => (
                         <ComboBox
@@ -377,7 +377,7 @@ export function CreateMeetingModal({
                             Bu toplantı öncekinin...
                           </label>
                           <select
-                            {...register("relation_type")}
+                            {...register("relationType")}
                             className="flex h-10 w-full rounded-lg border border-surface-300 bg-white px-3 text-sm text-surface-900 transition-colors focus:border-brand-500 focus:outline-none focus:ring-2 focus:ring-brand-500/30 dark:border-surface-600 dark:bg-surface-900 dark:text-surface-100"
                             disabled={isLoading}
                           >
@@ -399,7 +399,7 @@ export function CreateMeetingModal({
                           )}
                         />
                         <Controller
-                          name="copy_open_tasks"
+                          name="copyOpenTasks"
                           control={control}
                           render={({ field }) => (
                             <Checkbox

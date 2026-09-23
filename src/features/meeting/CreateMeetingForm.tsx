@@ -27,7 +27,7 @@ export function CreateMeetingForm({
   const [meetingDate, setMeetingDate] = useState("");
   const [errors, setErrors] = useState<{
     title?: string;
-    meeting_date?: string;
+    meetingDate?: string;
   }>({});
 
   function validate(): boolean {
@@ -40,7 +40,7 @@ export function CreateMeetingForm({
     }
 
     if (!meetingDate) {
-      next.meeting_date = "Toplantı tarihi gereklidir.";
+      next.meetingDate = "Toplantı tarihi gereklidir.";
     }
 
     setErrors(next);
@@ -54,7 +54,7 @@ export function CreateMeetingForm({
     await onSubmit({
       title: title.trim(),
       description: description.trim() || undefined,
-      meeting_date: meetingDate,
+      meetingDate: meetingDate,
     });
   }
 
@@ -84,7 +84,7 @@ export function CreateMeetingForm({
         type="date"
         value={meetingDate}
         onChange={(e) => setMeetingDate(e.target.value)}
-        error={errors.meeting_date}
+        error={errors.meetingDate}
         disabled={isLoading}
       />
 

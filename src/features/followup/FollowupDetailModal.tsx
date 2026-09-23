@@ -69,19 +69,19 @@ export function FollowupDetailModal({
   const [activeTab, setActiveTab] = useState<DetailTab>("subject");
 
   // Local editable state
-  const [status, setStatus] = useState<ActionStatus>(item?.status ?? "OPEN");
-  const [dueDate, setDueDate] = useState(item?.due_date ?? "");
-  const [completedOn, setCompletedOn] = useState(item?.completed_on ?? "");
-  const [waitingReason, setWaitingReason] = useState(item?.waiting_reason ?? "");
-  const [devNote, setDevNote] = useState(item?.development_note ?? "");
+  const [status, setStatus] = useState<ActionStatus>(item?.actionStatus ?? "OPEN");
+  const [dueDate, setDueDate] = useState(item?.dueDate ?? "");
+  const [completedOn, setCompletedOn] = useState(item?.completedOn ?? "");
+  const [waitingReason, setWaitingReason] = useState(item?.waitingReason ?? "");
+  const [devNote, setDevNote] = useState(item?.developmentNote ?? "");
 
   // Sync local state when item changes
-  if (item && status !== item.status && !isOpen) {
-    setStatus(item.status);
-    setDueDate(item.due_date ?? "");
-    setCompletedOn(item.completed_on ?? "");
-    setWaitingReason(item.waiting_reason ?? "");
-    setDevNote(item.development_note ?? "");
+  if (item && status !== item.actionStatus && !isOpen) {
+    setStatus(item.actionStatus);
+    setDueDate(item.dueDate ?? "");
+    setCompletedOn(item.completedOn ?? "");
+    setWaitingReason(item.waitingReason ?? "");
+    setDevNote(item.developmentNote ?? "");
   }
 
   if (!item) return null;
@@ -95,11 +95,11 @@ export function FollowupDetailModal({
   function handleSave() {
     if (!item) return;
     onUpdate?.(item.id, {
-      status,
-      due_date: dueDate || null,
-      completed_on: completedOn || null,
-      waiting_reason: waitingReason,
-      development_note: devNote,
+      actionStatus: status,
+      dueDate: dueDate || null,
+      completedOn: completedOn || null,
+      waitingReason: waitingReason,
+      developmentNote: devNote,
     });
     onClose();
   }
@@ -148,7 +148,7 @@ export function FollowupDetailModal({
                 <div>
                   <p className="text-xs text-surface-400">Sorumlu kişi</p>
                   <p className="text-sm font-medium text-surface-900 dark:text-surface-50">
-                    {item.responsible_person_name || "Seçilmedi"}
+                    {item.responsiblePersonName || "Seçilmedi"}
                   </p>
                 </div>
               </div>
@@ -159,7 +159,7 @@ export function FollowupDetailModal({
                 <div>
                   <p className="text-xs text-surface-400">Sorumlu firma</p>
                   <p className="text-sm font-medium text-surface-900 dark:text-surface-50">
-                    {item.responsible_company_name || "Seçilmedi"}
+                    {item.responsibleCompanyName || "Seçilmedi"}
                   </p>
                 </div>
               </div>
@@ -203,7 +203,7 @@ export function FollowupDetailModal({
                 <div>
                   <p className="text-xs text-surface-400">Önce bitmesi gereken</p>
                   <p className="text-sm font-medium text-surface-900 dark:text-surface-50">
-                    {item.blocker_item_text || "Başka bir öğe bağlı değil"}
+                    {item.blockerItemText || "Başka bir öğe bağlı değil"}
                   </p>
                 </div>
               </div>
@@ -233,13 +233,13 @@ export function FollowupDetailModal({
         {/* ──────────── Tab 2: Gelişme Geçmişi ──────────── */}
         {activeTab === "history" && (
           <div className="space-y-1">
-            {item.change_log && item.change_log.length > 0 ? (
+            {item.changeLog && item.changeLog.length > 0 ? (
               <div className="relative">
                 {/* Timeline line */}
                 <div className="absolute left-[15px] top-2 bottom-2 w-px bg-surface-200 dark:bg-surface-700" />
 
                 <div className="space-y-4">
-                  {[...item.change_log].reverse().map((log) => (
+                  {[...item.changeLog].reverse().map((log) => (
                     <div key={log.id} className="relative flex gap-3 pl-1">
                       {/* Icon */}
                       <div className={cn("relative z-10 flex h-8 w-8 shrink-0 items-center justify-center rounded-full", ACTION_COLOR[log.action])}>
@@ -253,17 +253,17 @@ export function FollowupDetailModal({
                             {log.description}
                           </p>
                           <span className="text-xs text-surface-400 whitespace-nowrap">
-                            {formatDateTime(log.timestamp)}
+                            {formatDateTime(log.changedAt)}
                           </span>
                         </div>
                         <p className="mt-1 text-xs text-surface-500 dark:text-surface-400">
-                          {log.user_name}
-                          {log.field && (
+                          {log.changedByName}
+                          {log.fieldName && (
                             <span>
                               {" · "}
-                              <span className="font-medium">{log.field}</span>
-                              {log.old_value && <span className="line-through text-danger-500 ml-1">{log.old_value}</span>}
-                              {log.new_value && <span className="text-success-600 ml-1">→ {log.new_value}</span>}
+                              <span className="font-medium">{log.fieldName}</span>
+                              {log.oldValue && <span className="line-through text-danger-500 ml-1">{log.oldValue}</span>}
+                              {log.newValue && <span className="text-success-600 ml-1">→ {log.newValue}</span>}
                             </span>
                           )}
                         </p>
@@ -284,12 +284,12 @@ export function FollowupDetailModal({
         {/* ──────────── Tab 3: İlişkili Tutanaklar ──────────── */}
         {activeTab === "minutes" && (
           <div className="space-y-3">
-            {item.source_meeting_id ? (
+            {item.sourceMeetingId ? (
               <div
                 className="flex cursor-pointer items-center gap-3 rounded-lg border border-surface-200 p-4 transition-colors hover:bg-surface-50 dark:border-surface-700 dark:hover:bg-surface-800"
                 onClick={() => {
                   onClose();
-                  navigate(`/meetings/${item.source_meeting_id}/minutes`);
+                  navigate(`/meetings/${item.sourceMeetingId}/minutes`);
                 }}
               >
                 <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-lg bg-brand-50 text-brand-600 dark:bg-brand-950/50 dark:text-brand-400">
@@ -297,10 +297,10 @@ export function FollowupDetailModal({
                 </div>
                 <div className="flex-1 min-w-0">
                   <p className="text-sm font-medium text-surface-900 dark:text-surface-50 truncate">
-                    {item.source_meeting_title}
+                    {item.sourceMeetingTitle}
                   </p>
                   <p className="text-xs text-surface-400">
-                    {item.source_meeting_date && formatDate(item.source_meeting_date, "short")}
+                    {item.sourceMeetingDate && formatDate(item.sourceMeetingDate, "short")}
                   </p>
                 </div>
                 <ArrowRight className="h-4 w-4 text-surface-400" />

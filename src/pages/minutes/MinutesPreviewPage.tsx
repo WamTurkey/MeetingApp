@@ -17,8 +17,8 @@ export function MinutesPreviewPage() {
   const meetingId = Number(id);
 
   const meeting = MOCK_MEETINGS.find((m) => m.id === meetingId);
-  const notes = MOCK_NOTES.filter((n) => n.meeting_id === meetingId);
-  const participants = MOCK_PARTICIPANTS.filter((p) => p.meeting_id === meetingId);
+  const notes = MOCK_NOTES.filter((n) => n.meetingId === meetingId);
+  const participants = MOCK_PARTICIPANTS.filter((p) => p.meetingId === meetingId);
 
   if (!meeting) {
     return (
@@ -31,9 +31,9 @@ export function MinutesPreviewPage() {
     );
   }
 
-  const decisions = notes.filter((n) => n.type === "DECISION");
-  const tasks = notes.filter((n) => n.type === "TASK");
-  const infoNotes = notes.filter((n) => n.type === "INFO" || n.type === "NOTE");
+  const decisions = notes.filter((n) => n.noteType === "DECISION");
+  const tasks = notes.filter((n) => n.noteType === "TASK");
+  const infoNotes = notes.filter((n) => n.noteType === "INFO" || n.noteType === "NOTE");
 
   return (
     <div className="space-y-6">
@@ -76,13 +76,13 @@ export function MinutesPreviewPage() {
                   {meeting.title}
                 </td>
               </tr>
-              {meeting.location_name && (
+              {meeting.locationName && (
                 <tr className="border-b border-surface-200 dark:border-surface-700">
                   <td className="py-2.5 pr-4 font-semibold text-surface-600 dark:text-surface-400 whitespace-nowrap">
                     Toplantı Yeri
                   </td>
                   <td className="py-2.5 text-surface-900 dark:text-surface-50">
-                    {meeting.location_name}
+                    {meeting.locationName}
                   </td>
                 </tr>
               )}
@@ -91,8 +91,8 @@ export function MinutesPreviewPage() {
                   Gün ve Saat
                 </td>
                 <td className="py-2.5 text-surface-900 dark:text-surface-50">
-                  {formatDate(meeting.meeting_date, "weekday")}
-                  {meeting.planned_start ? ` — ${meeting.planned_start}` : ""}
+                  {formatDate(meeting.meetingDate, "weekday")}
+                  {meeting.plannedStart ? ` — ${meeting.plannedStart}` : ""}
                 </td>
               </tr>
             </tbody>
@@ -124,7 +124,7 @@ export function MinutesPreviewPage() {
               <tbody>
                 {participants.map((p) => (
                   <tr key={p.id} className="border-b border-surface-100 dark:border-surface-700/50">
-                    <td className="py-2 text-surface-900 dark:text-surface-50">{p.name}</td>
+                    <td className="py-2 text-surface-900 dark:text-surface-50">{p.personName}</td>
                     <td className="py-2 text-surface-600 dark:text-surface-400">{p.title}</td>
                     <td className="py-2">{PARTICIPANT_ROLE_LABEL[p.role]}</td>
                   </tr>
@@ -178,11 +178,11 @@ export function MinutesPreviewPage() {
                   <span className="mt-1 h-4 w-4 shrink-0 rounded border border-surface-300" />
                   <span>
                     {n.content}
-                    {n.responsible_person_name && (
-                      <span className="text-surface-500"> — Sorumlu: {n.responsible_person_name}</span>
+                    {n.responsiblePersonName && (
+                      <span className="text-surface-500"> — Sorumlu: {n.responsiblePersonName}</span>
                     )}
-                    {n.due_date && (
-                      <span className="text-surface-500"> · Termin: {formatDate(n.due_date, "short")}</span>
+                    {n.dueDate && (
+                      <span className="text-surface-500"> · Termin: {formatDate(n.dueDate, "short")}</span>
                     )}
                   </span>
                 </li>
@@ -200,8 +200,8 @@ export function MinutesPreviewPage() {
             <div className="space-y-3">
               {infoNotes.map((n) => (
                 <div key={n.id} className="flex items-start gap-3">
-                  <Badge variant={NOTE_TYPE_BADGE_VARIANT[n.type]} size="sm">
-                    {NOTE_TYPE_LABEL[n.type]}
+                  <Badge variant={NOTE_TYPE_BADGE_VARIANT[n.noteType]} size="sm">
+                    {NOTE_TYPE_LABEL[n.noteType]}
                   </Badge>
                   <p className="flex-1 text-sm text-surface-800 dark:text-surface-200">
                     {n.content}
@@ -217,16 +217,10 @@ export function MinutesPreviewPage() {
           <h3 className="mb-3 text-sm font-bold uppercase tracking-wider text-surface-700 dark:text-surface-300">
             Bir Sonraki Toplantı
           </h3>
-          {meeting.next_meeting_at ? (
+          {meeting.nextMeetingAt ? (
             <div className="text-sm text-surface-800 dark:text-surface-200">
-              <p>Tarih: {formatDateTime(meeting.next_meeting_at)}</p>
-              {meeting.next_meeting_note && <p className="mt-1">{meeting.next_meeting_note}</p>}
-            </div>
-          ) : meeting.following && meeting.following.length > 0 ? (
-            <div className="text-sm text-surface-800 dark:text-surface-200 space-y-1">
-              {meeting.following.map((f) => (
-                <p key={f.id}>#{f.id} · {f.title} — {formatDate(f.meeting_date, "short")}</p>
-              ))}
+              <p>Tarih: {formatDateTime(meeting.nextMeetingAt)}</p>
+              {meeting.nextMeetingNote && <p className="mt-1">{meeting.nextMeetingNote}</p>}
             </div>
           ) : (
             <p className="text-sm text-surface-400 italic">Henüz planlanmadı.</p>

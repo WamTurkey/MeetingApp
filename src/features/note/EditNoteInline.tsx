@@ -28,7 +28,7 @@ export function EditNoteInline({
   isLoading = false,
 }: EditNoteInlineProps) {
   const [content, setContent] = useState(note.content);
-  const [type, setType] = useState<NoteType>(note.type);
+  const [type, setType] = useState<NoteType>(note.noteType);
   const [error, setError] = useState("");
 
   async function handleSubmit(e: FormEvent) {
@@ -40,11 +40,11 @@ export function EditNoteInline({
     }
 
     setError("");
-    const payload: NoteUpdatePayload = {};
+    const payload: Partial<NoteUpdatePayload> = {};
     if (content.trim() !== note.content) payload.content = content.trim();
-    if (type !== note.type) payload.type = type;
+    if (type !== note.noteType) payload.noteType = type;
 
-    await onSave(note.id, payload);
+    await onSave(note.id, payload as any);
   }
 
   const typeOptions = NOTE_TYPE_OPTIONS.filter((o) => o.value !== "");

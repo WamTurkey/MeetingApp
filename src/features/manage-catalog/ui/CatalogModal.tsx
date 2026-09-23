@@ -46,7 +46,7 @@ export function CatalogModal({
       return;
     }
     const newItem = create({ ...formData, active });
-    onCreated?.(newItem.id);
+    if (newItem && typeof newItem === "object" && "id" in newItem) onCreated?.((newItem as any).id);
     resetForm();
     onClose();
   }
@@ -154,12 +154,12 @@ export function CatalogModal({
                       <td className="px-3 py-2 text-center">
                         <span
                           className={`inline-block rounded-full px-2 py-0.5 text-xs font-medium ${
-                            item.active
+                            item.isActive
                               ? "bg-success-100 text-success-700 dark:bg-success-900/30 dark:text-success-400"
                               : "bg-surface-100 text-surface-500 dark:bg-surface-700 dark:text-surface-400"
                           }`}
                         >
-                          {item.active ? "Aktif" : "Pasif"}
+                          {item.isActive ? "Aktif" : "Pasif"}
                         </span>
                       </td>
                       <td className="px-3 py-2 text-right">

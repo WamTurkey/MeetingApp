@@ -1,37 +1,30 @@
 /**
- * useCatalog — CRUD hook for catalog entities (projects, companies, locations, categories).
+ * Hook: useCatalog
  *
- * Currently uses mock data. When API is connected, replace fetcher with actual API calls.
+ * API'den katalog verilerini çeker (Companies, Projects, Locations, Categories).
+ * Mock veriden API'ye geçirildi.
  */
 import { useState, useCallback, useEffect } from "react";
 import type { ComboBoxOption } from "@/shared/ui/ComboBox";
-
-import { MOCK_PROJECTS } from "@/entities/project/mock";
-import { MOCK_COMPANIES } from "@/entities/company/mock";
-import { MOCK_LOCATIONS } from "@/entities/location/mock";
-import { MOCK_CATEGORIES } from "@/entities/category/mock";
+import {
+  fetchCompanies, fetchProjects, fetchLocations, fetchCategories,
+  createCompany, createProject, createLocation, createCategory,
+  deleteCompany, deleteProject, deleteLocation, deleteCategory,
+} from "@/services/catalogService";
 
 export type CatalogKind = "projects" | "companies" | "locations" | "categories";
 
 interface CatalogItem {
   id: number;
   name: string;
-  active: boolean;
-  code?: string;
-  short_name?: string;
+  isActive: boolean;
+  code?: string | null;
+  shortName?: string | null;
 }
 
-const CATALOG_CONFIG: Record<
-  CatalogKind,
-  {
-    label: string;
-    mock: CatalogItem[];
-    fields: { key: string; label: string; placeholder?: string }[];
-  }
-> = {
+const CATALOG_FIELDS: Record<CatalogKind, { label: string; fields: { key: string; label: string; placeholder?: string }[] }> = {
   projects: {
     label: "Proje",
-    mock: MOCK_PROJECTS.map((p) => ({ ...p, code: p.code })) as CatalogItem[],
     fields: [
       { key: "name", label: "Proje Adı *", placeholder: "Örn: Ankara-İstanbul YHT" },
       { key: "code", label: "Proje Kodu", placeholder: "Örn: ANK-IST" },
@@ -39,25 +32,19 @@ const CATALOG_CONFIG: Record<
   },
   companies: {
     label: "Firma",
-    mock: MOCK_COMPANIES.map((c) => ({
-      ...c,
-      short_name: c.short_name,
-    })) as CatalogItem[],
     fields: [
       { key: "name", label: "Firma Adı *", placeholder: "Örn: Garanti Bankası A.Ş." },
-      { key: "short_name", label: "Kısa Adı", placeholder: "Örn: Garanti+" },
+      { key: "shortName", label: "Kısa Adı", placeholder: "Örn: Garanti+" },
     ],
   },
   locations: {
     label: "Toplantı Yeri",
-    mock: MOCK_LOCATIONS as CatalogItem[],
     fields: [
       { key: "name", label: "Yer Adı *", placeholder: "Örn: Merkez Ofis Konferans Salonu" },
     ],
   },
   categories: {
     label: "Kategori",
-    mock: MOCK_CATEGORIES as CatalogItem[],
     fields: [
       { key: "name", label: "Kategori Adı *", placeholder: "Örn: Proje İlerleme Toplantısı" },
     ],
@@ -65,37 +52,86 @@ const CATALOG_CONFIG: Record<
 };
 
 export function useCatalog(kind: CatalogKind) {
-  const config = CATALOG_CONFIG[kind];
+  const config = CATALOG_FIELDS[kind];
   const [items, setItems] = useState<CatalogItem[]>([]);
-  const [isLoading] = useState(false);
+  const [isLoading, setIsLoading] = useState(true);
 
-  // Initialize from mock
-  useEffect(() => {
-    setItems([...config.mock]);
+  // API'den veri çek
+  const load = useCallback(async () => {
+    setIsLoading(true);
+    try {
+      let data: CatalogItem[];
+      switch (kind) {
+        case "companies":
+          data = (await fetchCompanies()).map(c => ({ id: c.id, name: c.name, shortName: c.shortName, isActive: c.isActive }));
+          break;
+        case "projects":
+          data = (await fetchProjects()).map(p => ({ id: p.id, name: p.name, code: p.code, isActive: p.isActive }));
+          break;
+        case "locations":
+          data = (await fetchLocations()).map(l => ({ id: l.id, name: l.name, isActive: l.isActive }));
+          break;
+        case "categories":
+          data = (await fetchCategories()).map(c => ({ id: c.id, name: c.name, isActive: c.isActive }));
+          break;
+      }
+      setItems(data);
+    } catch (err) {
+      console.error(`[useCatalog:${kind}] API Error:`, err);
+    } finally {
+      setIsLoading(false);
+    }
   }, [kind]);
 
+  useEffect(() => {
+    load();
+  }, [load]);
+
   const options: ComboBoxOption[] = items
-    .filter((i) => i.active)
+    .filter((i) => i.isActive)
     .map((i) => ({ value: i.id, label: i.name }));
 
   const create = useCallback(
-    (data: Record<string, string | boolean>) => {
-      const newItem: CatalogItem = {
-        id: Date.now(),
-        name: data.name as string,
-        active: data.active !== false,
-        ...(data.code != null ? { code: data.code as string } : {}),
-        ...(data.short_name != null ? { short_name: data.short_name as string } : {}),
-      };
-      setItems((prev) => [...prev, newItem]);
-      return newItem;
+    async (data: Record<string, string | boolean>) => {
+      try {
+        switch (kind) {
+          case "companies":
+            await createCompany({ name: data.name as string, shortName: data.shortName as string });
+            break;
+          case "projects":
+            await createProject({ name: data.name as string, code: data.code as string });
+            break;
+          case "locations":
+            await createLocation({ name: data.name as string });
+            break;
+          case "categories":
+            await createCategory({ name: data.name as string });
+            break;
+        }
+        await load(); // yeniden yükle
+      } catch (err) {
+        console.error(`[useCatalog:${kind}] Create Error:`, err);
+      }
     },
-    [],
+    [kind, load],
   );
 
-  const remove = useCallback((id: number) => {
-    setItems((prev) => prev.filter((i) => i.id !== id));
-  }, []);
+  const remove = useCallback(
+    async (id: number) => {
+      try {
+        switch (kind) {
+          case "companies": await deleteCompany(id); break;
+          case "projects": await deleteProject(id); break;
+          case "locations": await deleteLocation(id); break;
+          case "categories": await deleteCategory(id); break;
+        }
+        await load();
+      } catch (err) {
+        console.error(`[useCatalog:${kind}] Delete Error:`, err);
+      }
+    },
+    [kind, load],
+  );
 
   return {
     items,

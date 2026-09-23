@@ -50,23 +50,23 @@ export function CalendarPage() {
   const events = useMemo(() => {
     const meetingEvents = MOCK_MEETINGS.map((m) => {
       const colors = STATUS_COLORS[m.status];
-      const startDate = m.started_at
-        ? m.started_at
-        : m.planned_start
-          ? `${m.meeting_date}T${m.planned_start}`
-          : m.meeting_date;
+      const startDate = m.startedAt
+        ? m.startedAt
+        : m.plannedStart
+          ? `${m.meetingDate}T${m.plannedStart}`
+          : m.meetingDate;
 
       return {
         id: `meeting-${m.id}`,
         title: m.title,
         start: startDate,
-        end: m.ended_at ?? undefined,
-        allDay: !m.planned_start && !m.started_at,
+        end: m.endedAt ?? undefined,
+        allDay: !m.plannedStart && !m.startedAt,
         backgroundColor: colors.bg,
         borderColor: colors.border,
         textColor: colors.text,
         extendedProps: {
-          type: "meeting" as const,
+          noteType: "meeting" as const,
           meetingId: m.id,
           status: m.status,
           description: m.description,
@@ -75,19 +75,19 @@ export function CalendarPage() {
     });
 
     const followupEvents = MOCK_FOLLOWUPS
-      .filter((f) => f.due_date && f.status !== "DONE" && f.status !== "CANCELLED")
+      .filter((f) => f.dueDate && f.actionStatus !== "DONE" && f.actionStatus !== "CANCELLED")
       .map((f) => ({
         id: `followup-${f.id}`,
         title: `⚡ ${f.text.slice(0, 50)}`,
-        start: f.due_date!,
+        start: f.dueDate!,
         allDay: true,
         backgroundColor: FOLLOWUP_COLOR.bg,
         borderColor: FOLLOWUP_COLOR.border,
         textColor: FOLLOWUP_COLOR.text,
         extendedProps: {
-          type: "followup" as const,
+          noteType: "followup" as const,
           followupId: f.id,
-          responsible: f.responsible_person_name,
+          responsible: f.responsiblePersonName,
         },
       }));
 

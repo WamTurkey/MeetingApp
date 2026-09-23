@@ -26,8 +26,8 @@ export function EditMeetingForm({
 }: EditMeetingFormProps) {
   const [title, setTitle] = useState(meeting.title);
   const [description, setDescription] = useState(meeting.description);
-  const [meetingDate, setMeetingDate] = useState(meeting.meeting_date);
-  const [errors, setErrors] = useState<{ title?: string; meeting_date?: string }>({});
+  const [meetingDate, setMeetingDate] = useState(meeting.meetingDate);
+  const [errors, setErrors] = useState<{ title?: string; meetingDate?: string }>({});
 
   function validate(): boolean {
     const next: typeof errors = {};
@@ -39,7 +39,7 @@ export function EditMeetingForm({
     }
 
     if (!meetingDate) {
-      next.meeting_date = "Toplantı tarihi gereklidir.";
+      next.meetingDate = "Toplantı tarihi gereklidir.";
     }
 
     setErrors(next);
@@ -50,12 +50,12 @@ export function EditMeetingForm({
     e.preventDefault();
     if (!validate()) return;
 
-    const payload: MeetingUpdatePayload = {};
+    const payload: Partial<MeetingUpdatePayload> = {};
     if (title.trim() !== meeting.title) payload.title = title.trim();
     if (description.trim() !== meeting.description) payload.description = description.trim();
-    if (meetingDate !== meeting.meeting_date) payload.meeting_date = meetingDate;
+    if (meetingDate !== meeting.meetingDate) payload.meetingDate = meetingDate;
 
-    await onSubmit(payload);
+    await onSubmit(payload as any);
   }
 
   return (
@@ -81,7 +81,7 @@ export function EditMeetingForm({
         type="date"
         value={meetingDate}
         onChange={(e) => setMeetingDate(e.target.value)}
-        error={errors.meeting_date}
+        error={errors.meetingDate}
         disabled={isLoading}
       />
 

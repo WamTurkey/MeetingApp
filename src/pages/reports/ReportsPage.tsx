@@ -30,8 +30,8 @@ export function ReportsPage() {
   const rows = useMemo(() => {
     const needle = search.toLowerCase();
     return MOCK_FOLLOWUPS.filter((f) => {
-      if (scope === "TRACKED" && f.status === "DONE") return false;
-      if (needle && !f.text.toLowerCase().includes(needle) && !(f.responsible_person_name ?? "").toLowerCase().includes(needle)) return false;
+      if (scope === "TRACKED" && f.actionStatus === "DONE") return false;
+      if (needle && !f.text.toLowerCase().includes(needle) && !(f.responsiblePersonName ?? "").toLowerCase().includes(needle)) return false;
       return true;
     });
   }, [scope, search]);
@@ -71,9 +71,9 @@ export function ReportsPage() {
       <div className="grid grid-cols-2 gap-4 sm:grid-cols-4">
         {[
           { label: "Toplam Madde", value: rows.length, color: "text-brand-600 bg-brand-50 dark:text-brand-400 dark:bg-brand-950/50" },
-          { label: "Açık", value: rows.filter((r) => r.status === "OPEN").length, color: "text-warning-600 bg-warning-50 dark:text-warning-400 dark:bg-warning-950/50" },
-          { label: "Sürüyor", value: rows.filter((r) => r.status === "IN_PROGRESS").length, color: "text-brand-600 bg-brand-50 dark:text-brand-400 dark:bg-brand-950/50" },
-          { label: "Tamamlanan", value: rows.filter((r) => r.status === "DONE").length, color: "text-success-600 bg-success-50 dark:text-success-400 dark:bg-success-950/50" },
+          { label: "Açık", value: rows.filter((r) => r.actionStatus === "OPEN").length, color: "text-warning-600 bg-warning-50 dark:text-warning-400 dark:bg-warning-950/50" },
+          { label: "Sürüyor", value: rows.filter((r) => r.actionStatus === "IN_PROGRESS").length, color: "text-brand-600 bg-brand-50 dark:text-brand-400 dark:bg-brand-950/50" },
+          { label: "Tamamlanan", value: rows.filter((r) => r.actionStatus === "DONE").length, color: "text-success-600 bg-success-50 dark:text-success-400 dark:bg-success-950/50" },
         ].map((stat) => (
           <div key={stat.label} className="rounded-xl border border-surface-200 bg-white p-4 dark:border-surface-700 dark:bg-surface-800">
             <p className="text-xs text-surface-500 dark:text-surface-400">{stat.label}</p>
@@ -99,10 +99,10 @@ export function ReportsPage() {
               {rows.map((row) => (
                 <tr key={row.id} className="border-b border-surface-100 transition-colors hover:bg-surface-50/50 dark:border-surface-800 dark:hover:bg-surface-800/50">
                   <td className="max-w-xs px-4 py-3 font-medium text-surface-900 truncate dark:text-surface-50">{row.text}</td>
-                  <td className="px-4 py-3 text-surface-600 dark:text-surface-400">{row.responsible_person_name ?? "—"}</td>
-                  <td className="px-4 py-3 text-surface-500 dark:text-surface-400">{row.source_meeting_title ?? "—"}</td>
-                  <td className="px-4 py-3 text-surface-500 dark:text-surface-400">{row.due_date ? formatDate(row.due_date, "short") : "—"}</td>
-                  <td className="px-4 py-3"><Badge variant={row.status === "DONE" ? "success" : row.status === "IN_PROGRESS" ? "warning" : "default"} size="sm">{ACTION_STATUS_LABEL[row.status]}</Badge></td>
+                  <td className="px-4 py-3 text-surface-600 dark:text-surface-400">{row.responsiblePersonName ?? "—"}</td>
+                  <td className="px-4 py-3 text-surface-500 dark:text-surface-400">{row.sourceMeetingTitle ?? "—"}</td>
+                  <td className="px-4 py-3 text-surface-500 dark:text-surface-400">{row.dueDate ? formatDate(row.dueDate, "short") : "—"}</td>
+                  <td className="px-4 py-3"><Badge variant={row.actionStatus === "DONE" ? "success" : row.actionStatus === "IN_PROGRESS" ? "warning" : "default"} size="sm">{ACTION_STATUS_LABEL[row.actionStatus]}</Badge></td>
                 </tr>
               ))}
             </tbody>

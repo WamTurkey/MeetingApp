@@ -45,7 +45,7 @@ export interface AddParticipantFormProps {
 /* ── Component ───────────────────────────────────── */
 
 export function AddParticipantForm({
-  meetingId,
+  meetingId: _meetingId,
   existingParticipants = [],
   onSubmit,
   onCancel,
@@ -67,7 +67,7 @@ export function AddParticipantForm({
 
   // Exclude already-added participants from dropdown
   const existingPersonIds = useMemo(
-    () => new Set(existingParticipants.map((p) => p.person_id)),
+    () => new Set(existingParticipants.map((p) => p.personId)),
     [existingParticipants],
   );
 
@@ -75,10 +75,10 @@ export function AddParticipantForm({
   const personOptions: ComboBoxOption[] = useMemo(
     () =>
       people
-        .filter((p) => p.active && !existingPersonIds.has(p.id))
+        .filter((p) => p.isActive && !existingPersonIds.has(p.id))
         .map((p) => ({
           value: p.id,
-          label: `${p.full_name}${p.title || p.company_name ? " — " : ""}${[p.title, p.company_name].filter(Boolean).join(" / ")}`,
+          label: `${p.fullName}${p.title || p.companyName ? " — " : ""}${[p.title, p.companyName].filter(Boolean).join(" / ")}`,
         })),
     [people, existingPersonIds],
   );
@@ -91,7 +91,7 @@ export function AddParticipantForm({
 
   // Company options for quick-add
   const companyOptions: SelectOption[] = useMemo(
-    () => MOCK_COMPANIES.filter((c) => c.active).map((c) => ({ value: String(c.id), label: c.name })),
+    () => MOCK_COMPANIES.filter((c) => c.isActive).map((c) => ({ value: String(c.id), label: c.name })),
     [],
   );
 
@@ -104,8 +104,8 @@ export function AddParticipantForm({
     }
     setError("");
     await onSubmit({
-      meeting_id: meetingId,
-      person_id: selectedPersonId,
+      
+      personId: selectedPersonId,
       role,
     });
     // Reset
@@ -122,15 +122,15 @@ export function AddParticipantForm({
       : null;
     const newPerson: Person = {
       id: Date.now(),
-      full_name: quickName.trim(),
+      fullName: quickName.trim(),
       email: quickEmail.trim(),
       title: quickTitle.trim(),
       phone: "",
-      company_id: company ? company.id : null,
-      company_name: company?.name,
-      active: quickActive,
-      created_at: new Date().toISOString(),
-      updated_at: new Date().toISOString(),
+      companyId: company ? company.id : null,
+      companyName: company?.name,
+      isActive: quickActive,
+      createdAt: new Date().toISOString(),
+      updatedAt: new Date().toISOString(),
     };
     setPeople((prev) => [...prev, newPerson]);
     setSelectedPersonId(newPerson.id);
@@ -175,7 +175,7 @@ export function AddParticipantForm({
         {selectedPerson && (
           <div className="flex items-center gap-3 rounded-lg border border-brand-200 bg-brand-50/50 px-4 py-3 dark:border-brand-800 dark:bg-brand-950/20">
             <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full bg-brand-100 text-sm font-bold text-brand-700 dark:bg-brand-900 dark:text-brand-300">
-              {selectedPerson.full_name
+              {selectedPerson.fullName
                 .split(" ")
                 .map((w) => w[0])
                 .join("")
@@ -184,10 +184,10 @@ export function AddParticipantForm({
             </div>
             <div className="flex-1 min-w-0">
               <p className="text-sm font-medium text-surface-900 truncate dark:text-surface-50">
-                {selectedPerson.full_name}
+                {selectedPerson.fullName}
               </p>
               <p className="text-xs text-surface-500 truncate dark:text-surface-400">
-                {[selectedPerson.title, selectedPerson.company_name, selectedPerson.email]
+                {[selectedPerson.title, selectedPerson.companyName, selectedPerson.email]
                   .filter(Boolean)
                   .join(" · ")}
               </p>

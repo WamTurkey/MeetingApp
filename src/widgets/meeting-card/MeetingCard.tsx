@@ -35,7 +35,7 @@ export function MeetingCard({ meeting }: MeetingCardProps) {
           )}
 
           <div className="mt-3">
-            <MeetingDateLabel date={meeting.meeting_date} variant="long" />
+            <MeetingDateLabel date={meeting.meetingDate} variant="long" />
           </div>
         </div>
 

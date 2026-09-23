@@ -5,63 +5,38 @@
 /** Every domain entity extends this with audit timestamps. */
 export interface BaseEntity {
   id: number;
-  created_at: string;
-  updated_at: string;
+  createdAt: string;
+  updatedAt: string;
 }
 
 /** ── Pagination ─────────────────────────────────── */
 
 export interface PaginatedResponse<T> {
   items: T[];
-  total: number;
+  totalCount: number;
   page: number;
-  page_size: number;
-  has_next: boolean;
-  has_previous: boolean;
+  pageSize: number;
 }
 
 export interface PaginationParams {
   page?: number;
-  page_size?: number;
+  pageSize?: number;
 }
-
-/** ── API Envelope ───────────────────────────────── */
-
-/** Standard success response from the backend. */
-export interface ApiSuccessResponse<T> {
-  success: true;
-  data: T;
-}
-
-/** Standard error response from the backend. */
-export interface ApiErrorResponse {
-  success: false;
-  error: ApiError;
-}
-
-export interface ApiError {
-  code: string;
-  message: string;
-  details: Record<string, unknown>;
-}
-
-/** Union of both response shapes. */
-export type ApiResponse<T> = ApiSuccessResponse<T> | ApiErrorResponse;
 
 /** ── Filter / Sort ──────────────────────────────── */
 
 export interface FilterParams {
   search?: string;
   status?: string;
-  date_from?: string;
-  date_to?: string;
+  dateFrom?: string;
+  dateTo?: string;
 }
 
 export type SortDirection = "asc" | "desc";
 
 export interface SortParams {
-  sort_by?: string;
-  sort_dir?: SortDirection;
+  sortBy?: string;
+  sortDir?: SortDirection;
 }
 
 /** ── Select Options ─────────────────────────────── */

@@ -23,37 +23,37 @@ export interface NoteRowProps {
 }
 
 export function NoteRow({ note, className }: NoteRowProps) {
-  const hasTaskMeta = Boolean(note.responsible_person_name || note.due_date || note.status);
+  const hasTaskMeta = Boolean(note.responsiblePersonName || note.dueDate || note.actionStatus);
 
   return (
     <div
       className={cn(
         "flex gap-3 rounded-lg border border-surface-100 bg-white p-4 border-l-4 transition-colors dark:border-surface-700 dark:bg-surface-800",
         "hover:bg-surface-50/50 dark:hover:bg-surface-700/30",
-        NOTE_TYPE_BORDER[note.type],
+        NOTE_TYPE_BORDER[note.noteType],
         className,
       )}
     >
       {/* Icon */}
       <div className="shrink-0 pt-0.5">
-        <NoteTypeIcon type={note.type} size={18} withBackground />
+        <NoteTypeIcon type={note.noteType} size={18} withBackground />
       </div>
 
       {/* Content */}
       <div className="flex-1 min-w-0">
         {/* Header: type badge + time */}
         <div className="mb-1.5 flex items-center gap-2 flex-wrap">
-          <Badge variant={NOTE_TYPE_BADGE_VARIANT[note.type]} size="sm">
-            {NOTE_TYPE_LABEL[note.type]}
+          <Badge variant={NOTE_TYPE_BADGE_VARIANT[note.noteType]} size="sm">
+            {NOTE_TYPE_LABEL[note.noteType]}
           </Badge>
           {/* Status badge for tasks */}
-          {note.status && note.type === "TASK" && (
-            <span className={cn("inline-flex items-center rounded-md px-1.5 py-0.5 text-2xs font-medium", ACTION_STATUS_COLOR[note.status])}>
-              {ACTION_STATUS_LABEL[note.status]}
+          {note.actionStatus && note.noteType === "TASK" && (
+            <span className={cn("inline-flex items-center rounded-md px-1.5 py-0.5 text-2xs font-medium", ACTION_STATUS_COLOR[note.actionStatus])}>
+              {ACTION_STATUS_LABEL[note.actionStatus]}
             </span>
           )}
           <span className="text-2xs text-surface-400">
-            {formatTime(note.created_at)}
+            {formatTime(note.createdAt)}
           </span>
         </div>
 
@@ -65,18 +65,18 @@ export function NoteRow({ note, className }: NoteRowProps) {
         {/* Task meta: responsible + due date */}
         {hasTaskMeta && (
           <div className="mt-2 flex flex-wrap items-center gap-3">
-            {note.responsible_person_name && (
+            {note.responsiblePersonName && (
               <span className="inline-flex items-center gap-1.5 rounded-md bg-surface-50 px-2 py-1 text-xs text-surface-600 dark:bg-surface-700 dark:text-surface-300">
                 <div className="flex h-5 w-5 items-center justify-center rounded-full bg-brand-100 text-brand-700 text-2xs font-bold dark:bg-brand-900 dark:text-brand-300">
-                  {note.responsible_person_name[0]}
+                  {note.responsiblePersonName[0]}
                 </div>
-                {note.responsible_person_name}
+                {note.responsiblePersonName}
               </span>
             )}
-            {note.due_date && (
+            {note.dueDate && (
               <span className="inline-flex items-center gap-1 rounded-md bg-surface-50 px-2 py-1 text-xs text-surface-600 dark:bg-surface-700 dark:text-surface-300">
                 <CalendarClock className="h-3.5 w-3.5 text-surface-400" />
-                {formatDate(note.due_date, "short")}
+                {formatDate(note.dueDate, "short")}
               </span>
             )}
           </div>
@@ -86,7 +86,7 @@ export function NoteRow({ note, className }: NoteRowProps) {
         <div className="mt-2 flex items-center gap-1">
           <span className="text-2xs text-surface-400">—</span>
           <span className="text-2xs font-medium text-surface-500 dark:text-surface-400">
-            {note.created_by_name}
+            {note.createdByName}
           </span>
         </div>
       </div>

@@ -33,8 +33,8 @@ export function MeetingPrepPanel({ meetingId: _meetingId, previousNotes }: Meeti
                   <input type="checkbox" className="mt-1 rounded border-surface-300 text-brand-600" />
                   <div className="flex-1 min-w-0">
                     <div className="mb-1 flex items-center gap-2">
-                      <Badge variant={note.type === "DECISION" ? "primary" : note.type === "TASK" ? "warning" : "default"} size="sm">{note.type}</Badge>
-                      {note.responsible_person_name && <span className="text-xs text-surface-400">→ {note.responsible_person_name}</span>}
+                      <Badge variant={note.noteType === "DECISION" ? "primary" : note.noteType === "TASK" ? "warning" : "default"} size="sm">{note.noteType}</Badge>
+                      {note.responsiblePersonName && <span className="text-xs text-surface-400">→ {note.responsiblePersonName}</span>}
                     </div>
                     <p className="text-sm text-surface-800 dark:text-surface-200">{note.content}</p>
                   </div>

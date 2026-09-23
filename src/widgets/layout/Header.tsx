@@ -46,9 +46,9 @@ export function Header({ onMenuToggle }: HeaderProps) {
         {/* User */}
         {user && (
           <div className="flex items-center gap-2 ml-1">
-            <ParticipantAvatar name={user.full_name} size="sm" />
+            <ParticipantAvatar name={user.fullName} size="sm" />
             <span className="hidden text-sm font-medium text-surface-700 sm:inline dark:text-surface-300">
-              {user.full_name}
+              {user.fullName}
             </span>
             <LogoutButton onLogout={logout} compact />
           </div>

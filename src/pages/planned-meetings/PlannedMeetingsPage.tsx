@@ -23,7 +23,7 @@ export function PlannedMeetingsPage() {
   const planned = useMemo(() => {
     const needle = search.toLowerCase();
     return MOCK_MEETINGS.filter((m) => m.status === "DRAFT" && (m.title.toLowerCase().includes(needle) || m.description.toLowerCase().includes(needle)))
-      .sort((a, b) => a.meeting_date.localeCompare(b.meeting_date));
+      .sort((a, b) => a.meetingDate.localeCompare(b.meetingDate));
   }, [search]);
 
   return (
@@ -59,12 +59,12 @@ export function PlannedMeetingsPage() {
                 <div className="flex-1 min-w-0">
                   <div className="mb-1 flex items-center gap-2">
                     <Badge variant="default" size="sm">Taslak</Badge>
-                    {m.planned_start && (
-                      <span className="flex items-center gap-1 text-xs text-surface-400"><Clock className="h-3 w-3" />{m.planned_start}</span>
+                    {m.plannedStart && (
+                      <span className="flex items-center gap-1 text-xs text-surface-400"><Clock className="h-3 w-3" />{m.plannedStart}</span>
                     )}
                   </div>
                   <h3 className="text-sm font-semibold text-surface-900 truncate dark:text-surface-50">{m.title}</h3>
-                  <p className="mt-0.5 text-xs text-surface-500 truncate dark:text-surface-400">{formatDate(m.meeting_date, "weekday")} · {m.description}</p>
+                  <p className="mt-0.5 text-xs text-surface-500 truncate dark:text-surface-400">{formatDate(m.meetingDate, "weekday")} · {m.description}</p>
                 </div>
                 <ChevronRight className="h-5 w-5 shrink-0 text-surface-300 transition-transform group-hover:translate-x-1 group-hover:text-brand-500 dark:text-surface-600" />
               </CardContent>

@@ -84,16 +84,16 @@ export function ParticipantsPanel({
                 className="group flex items-center gap-3 rounded-lg px-3 py-2.5 transition-colors hover:bg-surface-50 dark:hover:bg-surface-700/50"
               >
                 <ParticipantAvatar
-                  name={p.name}
-                  avatarUrl={p.avatar_url}
+                  name={p.personName}
+                  avatarUrl={p.avatarUrl}
                   size="md"
                 />
                 <div className="flex-1 min-w-0">
                   <p className="text-sm font-medium text-surface-900 truncate dark:text-surface-50">
-                    {p.name}
+                    {p.personName}
                   </p>
                   <p className="text-xs text-surface-500 truncate dark:text-surface-400">
-                    {[p.title, p.company_name, p.email].filter(Boolean).join(" · ")}
+                    {[p.title, p.companyName, p.email].filter(Boolean).join(" · ")}
                   </p>
                 </div>
                 <Badge variant="default" size="sm">

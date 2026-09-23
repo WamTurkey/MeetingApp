@@ -36,7 +36,7 @@ export function RemoveParticipantButton({
         onClick={() => setIsOpen(true)}
         icon={<UserMinus className="h-3.5 w-3.5" />}
         className="text-surface-400 hover:text-danger-600"
-        aria-label={`${participant.name} adlı katılımcıyı çıkar`}
+        aria-label={`${participant.personName} adlı katılımcıyı çıkar`}
       />
 
       <ConfirmDialog
@@ -44,7 +44,7 @@ export function RemoveParticipantButton({
         onClose={() => setIsOpen(false)}
         onConfirm={handleConfirm}
         title="Katılımcıyı Çıkar"
-        description={`"${participant.name}" bu toplantıdan çıkarılacaktır.`}
+        description={`"${participant.personName}" bu toplantıdan çıkarılacaktır.`}
         confirmLabel="Evet, Çıkar"
         cancelLabel="Vazgeç"
         variant="danger"

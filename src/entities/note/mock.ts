@@ -1,94 +1,12 @@
-/**
- * Mock note data for UI development and testing.
- *
- * Notes are tied to meetings via `meeting_id`. Covers all
- * four NoteType values (NOTE, DECISION, TASK, INFO).
- */
 import type { Note } from "./model";
 
 export const MOCK_NOTES: Note[] = [
-  {
-    id: 1,
-    meeting_id: 1,
-    content:
-      "Q3 bütçe kullanım oranı %78 olarak gerçekleşti. Kalan %22'lik bölüm Q4'e devredilecek.",
-    type: "INFO",
-    order: 1,
-    created_by: 1,
-    created_by_name: "Ahmet Yılmaz",
-    created_at: "2026-09-22T09:10:00Z",
-    updated_at: "2026-09-22T09:10:00Z",
-  },
-  {
-    id: 2,
-    meeting_id: 1,
-    content:
-      "Yeni pazar genişlemesi için Güneydoğu Anadolu bölgesi öncelikli hedef olarak belirlendi.",
-    type: "DECISION",
-    order: 2,
-    created_by: 1,
-    created_by_name: "Ahmet Yılmaz",
-    created_at: "2026-09-22T09:25:00Z",
-    updated_at: "2026-09-22T09:25:00Z",
-  },
-  {
-    id: 3,
-    meeting_id: 1,
-    content:
-      "Bölgesel pazar araştırması raporu 15 Ekim'e kadar hazırlanacak. Sorumlu: Pazarlama Departmanı.",
-    type: "TASK",
-    order: 3,
-    created_by: 2,
-    created_by_name: "Elif Demir",
-    created_at: "2026-09-22T09:30:00Z",
-    updated_at: "2026-09-22T09:30:00Z",
-  },
-  {
-    id: 4,
-    meeting_id: 1,
-    content:
-      "Departman hedefleri genel olarak tutarlı bulundu, ancak Ar-Ge bütçesinde %10 artış talep edildi.",
-    type: "NOTE",
-    order: 4,
-    created_by: 3,
-    created_by_name: "Mehmet Kaya",
-    created_at: "2026-09-22T09:45:00Z",
-    updated_at: "2026-09-22T09:45:00Z",
-  },
-  {
-    id: 5,
-    meeting_id: 3,
-    content:
-      "Kullanılabilirlik testi sonuçlarına göre onboarding akışı yeniden tasarlanacak.",
-    type: "DECISION",
-    order: 1,
-    created_by: 2,
-    created_by_name: "Elif Demir",
-    created_at: "2026-09-18T14:00:00Z",
-    updated_at: "2026-09-18T14:00:00Z",
-  },
-  {
-    id: 6,
-    meeting_id: 3,
-    content:
-      "Müşteri memnuniyet anketi NPS skoru: 42 (önceki dönem: 38). Olumlu trend devam ediyor.",
-    type: "INFO",
-    order: 2,
-    created_by: 1,
-    created_by_name: "Ahmet Yılmaz",
-    created_at: "2026-09-18T14:15:00Z",
-    updated_at: "2026-09-18T14:15:00Z",
-  },
-  {
-    id: 7,
-    meeting_id: 3,
-    content:
-      "UX ekibi yeni onboarding prototipini 2 hafta içinde sunacak.",
-    type: "TASK",
-    order: 3,
-    created_by: 2,
-    created_by_name: "Elif Demir",
-    created_at: "2026-09-18T14:30:00Z",
-    updated_at: "2026-09-18T14:30:00Z",
-  },
+  { id: 1, meetingId: 1, content: "Bütçe revizyonu onaylandı. 2024 Q4 planına geçilecek.", noteType: "DECISION", displayOrder: 0, createdBy: 1, createdByName: "Ahmet Yılmaz", createdAt: "2026-09-22T09:15:00Z", updatedAt: "2026-09-22T09:15:00Z" },
+  { id: 2, meetingId: 1, content: "Tedarikçi ile fiyat müzakereleri hafta sonuna kadar tamamlanacak.", noteType: "TASK", displayOrder: 1, responsiblePersonId: 2, responsiblePersonName: "Elif Demir", dueDate: "2026-09-29", actionStatus: "OPEN", createdAt: "2026-09-22T09:20:00Z", updatedAt: "2026-09-22T09:20:00Z" },
+  { id: 3, meetingId: 1, content: "Proje ilerleme raporu sunuldu. Detaylar ekte.", noteType: "INFO", displayOrder: 2, createdAt: "2026-09-22T09:25:00Z", updatedAt: "2026-09-22T09:25:00Z" },
+  { id: 4, meetingId: 1, content: "Risk analizi raporu güncellenmeli.", noteType: "TASK", displayOrder: 3, responsiblePersonId: 3, responsiblePersonName: "Mehmet Kaya", dueDate: "2026-10-05", actionStatus: "IN_PROGRESS", createdAt: "2026-09-22T09:30:00Z", updatedAt: "2026-09-22T09:30:00Z" },
+  { id: 5, meetingId: 1, content: "Bir sonraki toplantıda UX prototip sunulacak.", noteType: "NOTE", displayOrder: 4, createdAt: "2026-09-22T09:35:00Z", updatedAt: "2026-09-22T09:35:00Z" },
+  { id: 6, meetingId: 2, content: "Sprint hedeflerinin %85'i tamamlandı.", noteType: "INFO", displayOrder: 0, createdAt: "2026-09-25T14:05:00Z", updatedAt: "2026-09-25T14:05:00Z" },
+  { id: 7, meetingId: 2, content: "Login modülü yeniden yazılacak.", noteType: "TASK", displayOrder: 1, responsiblePersonId: 1, responsiblePersonName: "Ahmet Yılmaz", dueDate: "2026-10-02", actionStatus: "OPEN", createdAt: "2026-09-25T14:10:00Z", updatedAt: "2026-09-25T14:10:00Z" },
+  { id: 8, meetingId: 3, content: "Müşteri memnuniyet oranı %92'ye yükseldi.", noteType: "INFO", displayOrder: 0, createdAt: "2026-09-18T10:35:00Z", updatedAt: "2026-09-18T10:35:00Z" },
 ];

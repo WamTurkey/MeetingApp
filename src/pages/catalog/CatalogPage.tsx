@@ -31,15 +31,15 @@ export function CatalogPage() {
 
   const data = useMemo(() => {
     const needle = search.toLowerCase();
-    const filterActive = <T extends { active: boolean }>(items: T[]) =>
-      items.filter((i) => (showArchived || i.active) && JSON.stringify(i).toLowerCase().includes(needle));
+    const filterActive = <T extends { isActive: boolean }>(items: T[]) =>
+      items.filter((i) => (showArchived || i.isActive) && JSON.stringify(i).toLowerCase().includes(needle));
 
     switch (activeTab) {
-      case "people": return filterActive(MOCK_PEOPLE).map((p) => ({ id: p.id, primary: p.full_name, secondary: `${p.company_name ?? "—"} · ${p.title}`, tertiary: p.email, active: p.active }));
-      case "companies": return filterActive(MOCK_COMPANIES).map((c) => ({ id: c.id, primary: c.name, secondary: c.short_name, tertiary: "", active: c.active }));
-      case "projects": return filterActive(MOCK_PROJECTS).map((p) => ({ id: p.id, primary: p.name, secondary: p.code, tertiary: "", active: p.active }));
-      case "locations": return filterActive(MOCK_LOCATIONS).map((l) => ({ id: l.id, primary: l.name, secondary: "", tertiary: "", active: l.active }));
-      case "categories": return filterActive(MOCK_CATEGORIES).map((c) => ({ id: c.id, primary: c.name, secondary: "", tertiary: "", active: c.active }));
+      case "people": return filterActive(MOCK_PEOPLE).map((p) => ({ id: p.id, primary: p.fullName, secondary: `${p.companyName ?? "—"} · ${p.title}`, tertiary: p.email, isActive: p.isActive }));
+      case "companies": return filterActive(MOCK_COMPANIES).map((c) => ({ id: c.id, primary: c.name, secondary: c.shortName, tertiary: "", isActive: c.isActive }));
+      case "projects": return filterActive(MOCK_PROJECTS).map((p) => ({ id: p.id, primary: p.name, secondary: p.code, tertiary: "", isActive: p.isActive }));
+      case "locations": return filterActive(MOCK_LOCATIONS).map((l) => ({ id: l.id, primary: l.name, secondary: "", tertiary: "", isActive: l.isActive }));
+      case "categories": return filterActive(MOCK_CATEGORIES).map((c) => ({ id: c.id, primary: c.name, secondary: "", tertiary: "", isActive: c.isActive }));
     }
   }, [activeTab, search, showArchived]);
 
@@ -97,7 +97,7 @@ export function CatalogPage() {
                     <td className="px-4 py-3 text-surface-600 dark:text-surface-400">{row.secondary || "—"}</td>
                     <td className="px-4 py-3 text-surface-500 dark:text-surface-400">{row.tertiary || "—"}</td>
                     <td className="px-4 py-3">
-                      <Badge variant={row.active ? "success" : "default"} size="sm">{row.active ? "Aktif" : "Arşiv"}</Badge>
+                      <Badge variant={row.isActive ? "success" : "default"} size="sm">{row.isActive ? "Aktif" : "Arşiv"}</Badge>
                     </td>
                     <td className="px-4 py-3 text-right">
                       <div className="flex items-center justify-end gap-1">

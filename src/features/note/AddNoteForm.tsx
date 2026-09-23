@@ -26,9 +26,9 @@ const STATUS_OPTIONS = [
 
 const RESPONSIBLE_OPTIONS = [
   { value: "", label: "Seçilmedi" },
-  ...MOCK_PEOPLE.filter((p) => p.active).map((p) => ({
+  ...MOCK_PEOPLE.filter((p) => p.isActive).map((p) => ({
     value: p.id.toString(),
-    label: p.full_name,
+    label: p.fullName,
   })),
 ];
 
@@ -40,7 +40,7 @@ export interface AddNoteFormProps {
 }
 
 export function AddNoteForm({
-  meetingId,
+  meetingId: _meetingId,
   onSubmit,
   onCancel,
   isLoading = false,
@@ -67,12 +67,12 @@ export function AddNoteForm({
 
     setError("");
     await onSubmit({
-      meeting_id: meetingId,
+      
       content: content.trim(),
-      type,
-      due_date: hasDeadline && deadline ? deadline : undefined,
-      responsible_person_id: responsibleId ? Number(responsibleId) : undefined,
-      status: status ? (status as ActionStatus) : undefined,
+      noteType: type,
+      dueDate: hasDeadline && deadline ? deadline : undefined,
+      responsiblePersonId: responsibleId ? Number(responsibleId) : undefined,
+      actionStatus: status ? (status as ActionStatus) : undefined,
     });
 
     // Reset form on success

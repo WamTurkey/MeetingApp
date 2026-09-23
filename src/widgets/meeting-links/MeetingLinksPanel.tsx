@@ -16,8 +16,8 @@ interface MeetingLinksPanelProps {
 
 export function MeetingLinksPanel({ meeting }: MeetingLinksPanelProps) {
   const navigate = useNavigate();
-  const previous = meeting.previous;
-  const following = meeting.following ?? [];
+  const previous: any = null;
+  const following: any[] = [];
   const [selectedPrev, setSelectedPrev] = useState<number | null>(null);
 
   const previousMeetingOptions = MOCK_MEETINGS
@@ -25,7 +25,7 @@ export function MeetingLinksPanel({ meeting }: MeetingLinksPanelProps) {
     .map((m) => ({
       value: m.id,
       label: `#${m.id} - ${m.title}`,
-      description: formatDate(m.meeting_date, "short"),
+      description: formatDate(m.meetingDate, "short"),
     }));
 
   const linkedPrevMeeting = selectedPrev 
@@ -52,7 +52,7 @@ export function MeetingLinksPanel({ meeting }: MeetingLinksPanelProps) {
                   <ArrowLeft className="h-4 w-4" />
                 </div>
                 <div className="flex-1 min-w-0">
-                  <Badge variant="default" size="sm">{RELATION_LABEL[previous.relation_type as RelationType] ?? previous.relation_type}</Badge>
+                  <Badge variant="default" size="sm">{RELATION_LABEL[previous.relationType as RelationType] ?? previous.relationType}</Badge>
                   <p className="mt-1 text-sm font-medium text-surface-900 truncate dark:text-surface-50">#{previous.id} · {previous.title}</p>
                 </div>
                 <ChevronRight className="h-4 w-4 shrink-0 text-surface-300 transition-transform group-hover:translate-x-1 dark:text-surface-600" />
@@ -98,9 +98,9 @@ export function MeetingLinksPanel({ meeting }: MeetingLinksPanelProps) {
                       <ArrowRight className="h-4 w-4" />
                     </div>
                     <div className="flex-1 min-w-0">
-                      <Badge variant="primary" size="sm">{RELATION_LABEL[child.relation_type as RelationType] ?? child.relation_type}</Badge>
+                      <Badge variant="primary" size="sm">{RELATION_LABEL[child.relationType as RelationType] ?? child.relationType}</Badge>
                       <p className="mt-1 text-sm font-medium text-surface-900 truncate dark:text-surface-50">#{child.id} · {child.title}</p>
-                      <p className="text-xs text-surface-400">{formatDate(child.meeting_date, "short")}</p>
+                      <p className="text-xs text-surface-400">{formatDate(child.meetingDate, "short")}</p>
                     </div>
                     <ChevronRight className="h-4 w-4 shrink-0 text-surface-300 transition-transform group-hover:translate-x-1 dark:text-surface-600" />
                   </CardContent>

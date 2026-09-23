@@ -45,8 +45,8 @@ export function FollowupsPage() {
       (f) =>
         (activeBucket === "ALL" || f.bucket === activeBucket) &&
         (f.text.toLowerCase().includes(needle) ||
-          (f.responsible_person_name ?? "").toLowerCase().includes(needle) ||
-          (f.source_meeting_title ?? "").toLowerCase().includes(needle))
+          (f.responsiblePersonName ?? "").toLowerCase().includes(needle) ||
+          (f.sourceMeetingTitle ?? "").toLowerCase().includes(needle))
     );
   }, [search, activeBucket, followups]);
 
@@ -160,23 +160,23 @@ export function FollowupsPage() {
                         className="cursor-pointer border-b border-surface-100 transition-colors hover:bg-surface-50 dark:border-surface-700/50 dark:hover:bg-surface-700/30 last:border-0"
                       >
                         <td className="px-4 py-3 text-surface-600 dark:text-surface-400 max-w-[180px] truncate">
-                          {item.source_meeting_title || "—"}
+                          {item.sourceMeetingTitle || "—"}
                         </td>
                         <td className="px-4 py-3 text-surface-600 dark:text-surface-400 max-w-[200px] truncate">
-                          {item.source_meeting_title || "—"}
+                          {item.sourceMeetingTitle || "—"}
                         </td>
                         <td className="px-4 py-3 font-medium text-surface-900 dark:text-surface-50 max-w-[300px]">
                           <span className="line-clamp-2">{item.text}</span>
                         </td>
                         <td className="px-4 py-3 text-surface-600 dark:text-surface-400 whitespace-nowrap">
-                          {item.responsible_person_name || "Atanmadı"}
+                          {item.responsiblePersonName || "Atanmadı"}
                         </td>
                         <td className="px-4 py-3 text-surface-600 dark:text-surface-400 whitespace-nowrap">
-                          {item.due_date ? formatDate(item.due_date, "short") : "—"}
+                          {item.dueDate ? formatDate(item.dueDate, "short") : "—"}
                         </td>
                         <td className="px-4 py-3">
-                          <Badge variant={STATUS_BADGE_VARIANT[item.status]} size="sm">
-                            {ACTION_STATUS_LABEL[item.status]}
+                          <Badge variant={STATUS_BADGE_VARIANT[item.actionStatus]} size="sm">
+                            {ACTION_STATUS_LABEL[item.actionStatus]}
                           </Badge>
                         </td>
                       </tr>

@@ -1,3 +1,4 @@
+import type { MeetingStatus } from "@/shared/config/constants";
 import { useState } from "react";
 import { useParams, useNavigate, Link } from "react-router-dom";
 import { ArrowLeft, FileText, Pencil, Link2, FileCheck } from "lucide-react";
@@ -48,8 +49,8 @@ export function MeetingDetailPage() {
   const [activeTab, setActiveTab] = useState<DetailTab>("notes");
 
   const meeting = meetings.find((m) => m.id === meetingId);
-  const meetingNotes = notes.filter((n) => n.meeting_id === meetingId);
-  const meetingParticipants = participants.filter((p) => p.meeting_id === meetingId);
+  const meetingNotes = notes.filter((n) => n.meetingId === meetingId);
+  const meetingParticipants = participants.filter((p) => p.meetingId === meetingId);
 
   if (!meeting) {
     return (
@@ -63,7 +64,7 @@ export function MeetingDetailPage() {
   const editable = IS_EDITABLE[meeting.status];
 
   function handleStart() {
-    setMeetings((prev) => prev.map((m) => (m.id === meetingId ? { ...m, status: "ACTIVE" as const, started_at: new Date().toISOString(), version: m.version + 1 } : m)));
+    setMeetings((prev) => prev.map((m) => (m.id === meetingId ? { ...m, status: "ACTIVE" as const, startedAt: new Date().toISOString(), version: m.version + 1 } : m)));
   }
   function handleEnd() {
     setMeetings((prev) => prev.map((m) => (m.id === meetingId ? { ...m, status: "COMPLETED" as const, ended_at: new Date().toISOString(), version: m.version + 1 } : m)));
@@ -73,38 +74,38 @@ export function MeetingDetailPage() {
     navigate("/meetings", { replace: true });
   }
   function handleEdit(data: MeetingUpdatePayload) {
-    setMeetings((prev) => prev.map((m) => (m.id === meetingId ? { ...m, ...data, updated_at: new Date().toISOString() } : m)));
+    setMeetings((prev) => prev.map((m) => (m.id === meetingId ? { ...m, ...data, status: (data as any).status as MeetingStatus ?? m.status, updatedAt: new Date().toISOString() } : m)));
     setShowEdit(false);
   }
   function handleReorderNotes(reorderedNotes: Note[]) {
     setNotes((prev) => {
       // Find notes that do NOT belong to this meeting
-      const otherNotes = prev.filter(n => n.meeting_id !== meetingId);
+      const otherNotes = prev.filter(n => n.meetingId !== meetingId);
       // Combine them with the reordered notes for this meeting
       return [...otherNotes, ...reorderedNotes];
     });
   }
 
   function handleAddNote(data: NoteCreatePayload) {
-    const newNote: Note = { id: Date.now(), meeting_id: data.meeting_id, content: data.content, type: data.type, order: meetingNotes.length + 1, created_by: 1, created_by_name: "Ahmet Yılmaz", responsible_person_id: data.responsible_person_id, responsible_person_name: data.responsible_person_id ? "Sorumlu Kişi" : undefined, due_date: data.due_date, status: data.status, created_at: new Date().toISOString(), updated_at: new Date().toISOString() };
+    const newNote: Note = { id: Date.now(), meetingId: meetingId, content: data.content, noteType: data.noteType || "NOTE", displayOrder: meetingNotes.length + 1, responsiblePersonId: data.responsiblePersonId, responsiblePersonName: data.responsiblePersonId ? "Sorumlu Kişi" : undefined, dueDate: data.dueDate, actionStatus: data.actionStatus, createdAt: new Date().toISOString(), updatedAt: new Date().toISOString() };
     setNotes((prev) => [...prev, newNote]);
   }
   function handleDeleteNote(noteId: number) { setNotes((prev) => prev.filter((n) => n.id !== noteId)); }
   function handleAddParticipant(data: ParticipantCreatePayload) {
     // Resolve person data from the people pool
-    const person = MOCK_PEOPLE.find((p) => p.id === data.person_id);
+    const person = MOCK_PEOPLE.find((p) => p.id === data.personId);
     const newP: Participant = {
       id: Date.now(),
-      meeting_id: data.meeting_id,
-      person_id: data.person_id,
-      name: person?.full_name ?? "Bilinmeyen",
+      meetingId: meetingId,
+      personId: data.personId,
+      personName: person?.fullName ?? "Bilinmeyen",
       email: person?.email ?? "",
-      avatar_url: null,
+      avatarUrl: null,
       title: person?.title ?? "",
-      company_name: person?.company_name,
+      companyName: person?.companyName,
       role: data.role ?? "ATTENDEE",
-      created_at: new Date().toISOString(),
-      updated_at: new Date().toISOString(),
+      createdAt: new Date().toISOString(),
+      updatedAt: new Date().toISOString(),
     };
     setParticipants((prev) => [...prev, newP]);
   }
@@ -133,10 +134,10 @@ export function MeetingDetailPage() {
               <h1 className="text-xl font-bold text-surface-900 dark:text-surface-50">{meeting.title}</h1>
               {meeting.description && (<p className="mt-2 text-sm text-surface-600 leading-relaxed dark:text-surface-400">{meeting.description}</p>)}
               <div className="mt-3 flex flex-wrap items-center gap-3">
-                <MeetingDateLabel date={meeting.meeting_date} variant="weekday" />
-                {meeting.project_name && <span className="text-xs text-surface-400">Proje: {meeting.project_name}</span>}
-                {meeting.category_name && <span className="text-xs text-surface-400">Kategori: {meeting.category_name}</span>}
-                {meeting.location_name && <span className="text-xs text-surface-400">Yer: {meeting.location_name}</span>}
+                <MeetingDateLabel date={meeting.meetingDate} variant="weekday" />
+                {meeting.projectName && <span className="text-xs text-surface-400">Proje: {meeting.projectName}</span>}
+                {meeting.categoryName && <span className="text-xs text-surface-400">Kategori: {meeting.categoryName}</span>}
+                {meeting.locationName && <span className="text-xs text-surface-400">Yer: {meeting.locationName}</span>}
               </div>
             </div>
           </div>
@@ -168,11 +169,11 @@ export function MeetingDetailPage() {
         <Card><CardContent className="space-y-4">
           {[
             ["Gündem", meeting.subject ?? meeting.description ?? "Belirtilmedi"],
-            ["Planlanan Saat", meeting.planned_start ?? "Belirtilmedi"],
-            ["Başlangıç", meeting.started_at ? new Date(meeting.started_at).toLocaleString("tr-TR") : "Henüz başlamadı"],
-            ["Bitiş", meeting.ended_at ? new Date(meeting.ended_at).toLocaleString("tr-TR") : "Henüz bitmedi"],
-            ["Sonraki Toplantı", meeting.next_meeting_at ? new Date(meeting.next_meeting_at).toLocaleString("tr-TR") : "Belirtilmedi"],
-            ["Sonraki Toplantı Notu", meeting.next_meeting_note ?? "—"],
+            ["Planlanan Saat", meeting.plannedStart ?? "Belirtilmedi"],
+            ["Başlangıç", meeting.startedAt ? new Date(meeting.startedAt).toLocaleString("tr-TR") : "Henüz başlamadı"],
+            ["Bitiş", meeting.endedAt ? new Date(meeting.endedAt).toLocaleString("tr-TR") : "Henüz bitmedi"],
+            ["Sonraki Toplantı", meeting.nextMeetingAt ? new Date(meeting.nextMeetingAt).toLocaleString("tr-TR") : "Belirtilmedi"],
+            ["Sonraki Toplantı Notu", meeting.nextMeetingNote ?? "—"],
           ].map(([label, value]) => (
             <div key={label}>
               <p className="text-xs font-semibold uppercase tracking-wider text-surface-400">{label}</p>
@@ -189,7 +190,7 @@ export function MeetingDetailPage() {
           <Link to={`/meetings/${meetingId}/minutes`}><Button variant="primary" className="mt-4">Önizlemeye Git</Button></Link>
         </CardContent></Card>
       )}
-      {activeTab === "prep" && <MeetingPrepPanel meetingId={meetingId} previousNotes={notes.filter((n) => n.meeting_id !== meetingId && (n.type === "TASK" || n.type === "DECISION"))} />}
+      {activeTab === "prep" && <MeetingPrepPanel meetingId={meetingId} previousNotes={notes.filter((n) => n.meetingId !== meetingId && (n.noteType === "TASK" || n.noteType === "DECISION"))} />}
 
       {/* Edit modal */}
       <Modal isOpen={showEdit} onClose={() => setShowEdit(false)} title="Toplantıyı Düzenle" size="lg">

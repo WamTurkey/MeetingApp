@@ -20,15 +20,15 @@ export function DashboardPage() {
       id: Date.now(),
       title: (payload.title as string) || "",
       description: "",
-      meeting_date: (payload.meeting_date as string) || "",
+      meetingDate: (payload.meetingDate as string) || "",
       status: "DRAFT",
       version: 0,
-      project_id: (payload.project_id as number) ?? null,
-      company_id: (payload.company_id as number) ?? null,
-      location_id: (payload.location_id as number) ?? null,
-      category_id: (payload.category_id as number) ?? null,
-      created_at: new Date().toISOString(),
-      updated_at: new Date().toISOString(),
+      projectId: (payload.projectId as number) ?? null,
+      companyId: (payload.companyId as number) ?? null,
+      locationId: (payload.locationId as number) ?? null,
+      categoryId: (payload.categoryId as number) ?? null,
+      createdAt: new Date().toISOString(),
+      updatedAt: new Date().toISOString(),
     };
     setMeetings((prev) => [newMeeting, ...prev]);
     setShowCreate(false);
