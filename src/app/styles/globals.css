@@ -1,0 +1,238 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+/* ── Semantic Design Tokens (CSS Custom Properties) ── */
+@layer base {
+  :root {
+    /* Backgrounds */
+    --color-bg-body: 248 250 252;        /* surface-50 */
+    --color-bg-card: 255 255 255;        /* white */
+    --color-bg-input: 255 255 255;       /* white */
+    --color-bg-muted: 241 245 249;       /* surface-100 */
+    --color-bg-subtle: 248 250 252;      /* surface-50 */
+    /* Foregrounds */
+    --color-fg: 15 23 42;               /* surface-900 */
+    --color-fg-secondary: 100 116 139;   /* surface-500 */
+    --color-fg-muted: 148 163 184;       /* surface-400 */
+    /* Borders */
+    --color-border: 226 232 240;         /* surface-200 */
+    --color-border-muted: 241 245 249;   /* surface-100 */
+    /* Ring / Focus */
+    --color-ring: 59 130 246;            /* brand-500 */
+    /* Overlay */
+    --color-overlay: 0 0 0;             /* black */
+  }
+
+  .dark {
+    --color-bg-body: 2 6 23;             /* surface-950 */
+    --color-bg-card: 30 41 59;           /* surface-800 */
+    --color-bg-input: 15 23 42;          /* surface-900 */
+    --color-bg-muted: 30 41 59;          /* surface-800 */
+    --color-bg-subtle: 15 23 42;         /* surface-900 */
+    --color-fg: 248 250 252;             /* surface-50 */
+    --color-fg-secondary: 148 163 184;   /* surface-400 */
+    --color-fg-muted: 100 116 139;       /* surface-500 */
+    --color-border: 51 65 85;            /* surface-700 */
+    --color-border-muted: 30 41 59;      /* surface-800 */
+    --color-ring: 96 165 250;            /* brand-400 */
+    --color-overlay: 0 0 0;
+  }
+}
+
+/* ── Base Reset & Defaults ─────────────────────────── */
+@layer base {
+  *,
+  *::before,
+  *::after {
+    @apply border-border;
+  }
+
+  html {
+    @apply scroll-smooth;
+    font-feature-settings: "cv02", "cv03", "cv04", "cv11";
+  }
+
+  body {
+    @apply min-h-screen bg-bg-body font-sans text-fg antialiased;
+  }
+
+  /* Focus ring */
+  :focus-visible {
+    @apply outline-none ring-2 ring-ring ring-offset-2 ring-offset-bg-card;
+  }
+
+  /* Placeholder */
+  ::placeholder {
+    @apply text-surface-400;
+  }
+
+  /* Selection */
+  ::selection {
+    @apply bg-brand-100 text-brand-900;
+  }
+}
+
+/* ── Custom Scrollbar ──────────────────────────────── */
+@layer base {
+  ::-webkit-scrollbar {
+    @apply w-2 h-2;
+  }
+
+  ::-webkit-scrollbar-track {
+    @apply bg-transparent;
+  }
+
+  ::-webkit-scrollbar-thumb {
+    @apply rounded-full bg-surface-300 transition-colors;
+  }
+
+  ::-webkit-scrollbar-thumb:hover {
+    @apply bg-surface-400;
+  }
+
+  /* Firefox */
+  * {
+    scrollbar-width: thin;
+    scrollbar-color: theme("colors.surface.300") transparent;
+  }
+}
+
+/* ── Component Utilities ───────────────────────────── */
+@layer utilities {
+  .text-balance {
+    text-wrap: balance;
+  }
+
+  .glass {
+    @apply bg-white/80 backdrop-blur-xl border border-white/20;
+  }
+
+  .glass-dark {
+    @apply bg-surface-900/80 backdrop-blur-xl border border-surface-700/50;
+  }
+}
+
+/* ── FullCalendar Theme Overrides ─────────────────── */
+
+.calendar-wrapper .fc {
+  --fc-border-color: theme('colors.surface.200');
+  --fc-today-bg-color: theme('colors.brand.50');
+  --fc-neutral-bg-color: theme('colors.surface.50');
+  --fc-page-bg-color: transparent;
+  --fc-event-border-color: transparent;
+  font-family: inherit;
+}
+
+.dark .calendar-wrapper .fc {
+  --fc-border-color: theme('colors.surface.700');
+  --fc-today-bg-color: rgba(59, 130, 246, 0.08);
+  --fc-neutral-bg-color: theme('colors.surface.800');
+  --fc-page-bg-color: transparent;
+}
+
+/* Day headers */
+.calendar-wrapper .fc .fc-col-header-cell {
+  padding: 10px 0;
+  font-size: 0.75rem;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  color: theme('colors.surface.500');
+}
+.dark .calendar-wrapper .fc .fc-col-header-cell {
+  color: theme('colors.surface.400');
+}
+
+/* Day numbers */
+.calendar-wrapper .fc .fc-daygrid-day-number {
+  padding: 6px 8px;
+  font-size: 0.8125rem;
+  font-weight: 500;
+  color: theme('colors.surface.700');
+}
+.dark .calendar-wrapper .fc .fc-daygrid-day-number {
+  color: theme('colors.surface.300');
+}
+
+/* Other month days */
+.calendar-wrapper .fc .fc-day-other .fc-daygrid-day-number {
+  opacity: 0.4;
+}
+
+/* Today circle */
+.calendar-wrapper .fc .fc-day-today .fc-daygrid-day-number {
+  background: theme('colors.brand.600');
+  color: white;
+  border-radius: 9999px;
+  width: 28px;
+  height: 28px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+/* Events */
+.calendar-wrapper .fc .fc-event {
+  border-width: 2px !important;
+  border-left-width: 3px !important;
+  transition: transform 0.1s ease, box-shadow 0.1s ease;
+}
+.calendar-wrapper .fc .fc-event:hover {
+  transform: translateY(-1px);
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.1);
+}
+
+/* More link */
+.calendar-wrapper .fc .fc-daygrid-more-link {
+  font-size: 0.7rem;
+  font-weight: 600;
+  color: theme('colors.brand.600');
+  padding: 1px 4px;
+  border-radius: 4px;
+}
+.calendar-wrapper .fc .fc-daygrid-more-link:hover {
+  background: theme('colors.brand.50');
+}
+
+/* Time grid slots */
+.calendar-wrapper .fc .fc-timegrid-slot-label {
+  font-size: 0.7rem;
+  color: theme('colors.surface.400');
+}
+
+/* List view */
+.calendar-wrapper .fc .fc-list-event:hover td {
+  background: theme('colors.surface.50') !important;
+}
+.dark .calendar-wrapper .fc .fc-list-event:hover td {
+  background: theme('colors.surface.700') !important;
+}
+.calendar-wrapper .fc .fc-list-day-cushion {
+  background: theme('colors.surface.50') !important;
+}
+.dark .calendar-wrapper .fc .fc-list-day-cushion {
+  background: theme('colors.surface.800') !important;
+  color: theme('colors.surface.300');
+}
+
+/* Popover (more events popup) */
+.calendar-wrapper .fc .fc-popover {
+  border-radius: 12px;
+  border-color: theme('colors.surface.200');
+  box-shadow: 0 10px 40px rgba(0, 0, 0, 0.12);
+}
+.dark .calendar-wrapper .fc .fc-popover {
+  background: theme('colors.surface.800');
+  border-color: theme('colors.surface.700');
+}
+.calendar-wrapper .fc .fc-popover-header {
+  background: theme('colors.surface.50');
+  border-radius: 12px 12px 0 0;
+  font-size: 0.75rem;
+  font-weight: 600;
+}
+.dark .calendar-wrapper .fc .fc-popover-header {
+  background: theme('colors.surface.700');
+  color: theme('colors.surface.200');
+}
