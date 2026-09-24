@@ -2,18 +2,27 @@ import {
   createContext,
   useCallback,
   useContext,
+  useEffect,
   useMemo,
   useState,
   type ReactNode,
 } from "react";
 import type { User, LoginCredentials } from "@/entities/user/model";
-import { MOCK_CURRENT_USER } from "@/entities/user/mock";
+import {
+  login as apiLogin,
+  register as apiRegister,
+  getMe,
+  logout as apiLogout,
+  getStoredToken,
+  type RegisterRequest,
+} from "@/services/authService";
 
 interface AuthContextValue {
   user: User | null;
   isAuthenticated: boolean;
   isLoading: boolean;
   login: (creds: LoginCredentials) => Promise<void>;
+  register: (data: RegisterRequest) => Promise<void>;
   logout: () => void;
   error: string | null;
 }
@@ -22,27 +31,59 @@ const AuthContext = createContext<AuthContextValue | null>(null);
 
 export function AuthProvider({ children }: { children: ReactNode }) {
   const [user, setUser] = useState<User | null>(null);
-  const [isLoading, setIsLoading] = useState(false);
+  const [isLoading, setIsLoading] = useState(true); // true initially — checking token
   const [error, setError] = useState<string | null>(null);
 
+  // ──────────── On mount: check stored token ────────────
+  useEffect(() => {
+    const token = getStoredToken();
+    if (!token) {
+      setIsLoading(false);
+      return;
+    }
+
+    getMe()
+      .then((data) => {
+        setUser({
+          id: data.id,
+          email: data.email,
+          fullName: data.fullName,
+          isActive: data.isActive,
+          isSuperuser: data.isSuperuser,
+          createdAt: "",
+          updatedAt: "",
+        });
+      })
+      .catch(() => {
+        // Token geçersiz → temizle
+        apiLogout();
+        setUser(null);
+      })
+      .finally(() => setIsLoading(false));
+  }, []);
+
+  // ──────────── Login ────────────
   const login = useCallback(async (creds: LoginCredentials) => {
     setIsLoading(true);
     setError(null);
     try {
-      // Mock: simulate API delay
-      await new Promise((r) => setTimeout(r, 800));
-
-      if (
-        creds.email === "admin@example.com" &&
-        creds.password === "password123"
-      ) {
-        setUser(MOCK_CURRENT_USER);
-        localStorage.setItem("auth_token", "mock-jwt-token");
-      } else {
-        throw new Error("E-posta veya şifre hatalı.");
-      }
-    } catch (err) {
-      const message = err instanceof Error ? err.message : "Giriş başarısız.";
+      const data = await apiLogin({
+        email: creds.email,
+        password: creds.password,
+      });
+      setUser({
+        id: data.id,
+        email: data.email,
+        fullName: data.fullName,
+        isActive: true,
+        isSuperuser: false,
+        createdAt: "",
+        updatedAt: "",
+      });
+    } catch (err: any) {
+      const message =
+        err?.response?.data?.message ||
+        (err instanceof Error ? err.message : "Giriş başarısız.");
       setError(message);
       throw err;
     } finally {
@@ -50,10 +91,37 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     }
   }, []);
 
+  // ──────────── Register ────────────
+  const register = useCallback(async (data: RegisterRequest) => {
+    setIsLoading(true);
+    setError(null);
+    try {
+      const res = await apiRegister(data);
+      setUser({
+        id: res.id,
+        email: res.email,
+        fullName: res.fullName,
+        isActive: true,
+        isSuperuser: false,
+        createdAt: "",
+        updatedAt: "",
+      });
+    } catch (err: any) {
+      const message =
+        err?.response?.data?.message ||
+        (err instanceof Error ? err.message : "Kayıt başarısız.");
+      setError(message);
+      throw err;
+    } finally {
+      setIsLoading(false);
+    }
+  }, []);
+
+  // ──────────── Logout ────────────
   const logout = useCallback(() => {
+    apiLogout();
     setUser(null);
     setError(null);
-    localStorage.removeItem("auth_token");
   }, []);
 
   const value = useMemo(
@@ -62,10 +130,11 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       isAuthenticated: user !== null,
       isLoading,
       login,
+      register,
       logout,
       error,
     }),
-    [user, isLoading, login, logout, error],
+    [user, isLoading, login, register, logout, error],
   );
 
   return (

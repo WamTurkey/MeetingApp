@@ -125,7 +125,7 @@ export function LoginPage() {
                   <Mail className="pointer-events-none absolute left-3.5 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-500" />
                   <input
                     type="email"
-                    placeholder="admin@example.com"
+                    placeholder="admin@wam.com.tr"
                     value={email}
                     onChange={(e) => setEmail(e.target.value)}
                     disabled={isLoading}
@@ -186,9 +186,9 @@ export function LoginPage() {
                 Demo giriş bilgileri
               </p>
               <div className="mt-1.5 flex items-center justify-center gap-3 text-xs">
-                <code className="rounded-md bg-white/5 px-2 py-1 font-mono text-blue-300">admin@example.com</code>
+                <code className="rounded-md bg-white/5 px-2 py-1 font-mono text-blue-300">admin@wam.com.tr</code>
                 <span className="text-slate-600">/</span>
-                <code className="rounded-md bg-white/5 px-2 py-1 font-mono text-blue-300">password123</code>
+                <code className="rounded-md bg-white/5 px-2 py-1 font-mono text-blue-300">Admin123!</code>
               </div>
             </div>
 

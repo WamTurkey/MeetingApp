@@ -13,12 +13,13 @@ const apiClient = axios.create({
   },
 });
 
-// ──────────── Request Interceptor ────────────
+// ──────────── Request Interceptor — JWT Token ────────────
 apiClient.interceptors.request.use(
   (config) => {
-    // TODO: JWT token ekle
-    // const token = localStorage.getItem("auth_token");
-    // if (token) config.headers.Authorization = `Bearer ${token}`;
+    const token = localStorage.getItem("auth_token");
+    if (token) {
+      config.headers.Authorization = `Bearer ${token}`;
+    }
     return config;
   },
   (error) => {
@@ -27,7 +28,7 @@ apiClient.interceptors.request.use(
   },
 );
 
-// ──────────── Response Interceptor ────────────
+// ──────────── Response Interceptor — 401 Redirect ────────────
 apiClient.interceptors.response.use(
   (response) => response,
   (error) => {
@@ -36,8 +37,12 @@ apiClient.interceptors.response.use(
       console.error(`[API ${status}]`, data);
 
       if (status === 401) {
-        // TODO: Token expire → login sayfasına yönlendir
-        // window.location.href = "/login";
+        // Token geçersiz veya expire olmuş → oturumu temizle
+        localStorage.removeItem("auth_token");
+        // Login sayfasına yönlendir (Router dışında olduğumuz için window.location kullanıyoruz)
+        if (window.location.pathname !== "/login") {
+          window.location.href = "/login";
+        }
       }
     } else if (error.request) {
       console.error("[API Network Error] Sunucuya ulaşılamıyor", error.message);

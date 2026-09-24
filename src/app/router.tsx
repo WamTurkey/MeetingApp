@@ -1,6 +1,7 @@
 import { createBrowserRouter } from "react-router-dom";
 import { AppLayout } from "@/widgets/layout/AppLayout";
 import { ErrorFallback } from "@/shared/ui/ErrorFallback";
+import { RequireAuth } from "@/app/providers/RequireAuth";
 import { LoginPage } from "@/pages/login/LoginPage";
 import { DashboardPage } from "@/pages/dashboard/DashboardPage";
 import { MeetingsListPage } from "@/pages/meetings/MeetingsListPage";
@@ -22,7 +23,11 @@ export const router = createBrowserRouter([
     errorElement: <ErrorFallback />,
   },
   {
-    element: <AppLayout />,
+    element: (
+      <RequireAuth>
+        <AppLayout />
+      </RequireAuth>
+    ),
     errorElement: <ErrorFallback />,
     children: [
       { index: true, element: <DashboardPage /> },
