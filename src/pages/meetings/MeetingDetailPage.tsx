@@ -1,115 +1,209 @@
 import type { MeetingStatus } from "@/shared/config/constants";
-import { useState } from "react";
+import { useState, useEffect, useCallback } from "react";
 import { useParams, useNavigate, Link } from "react-router-dom";
-import { ArrowLeft, FileText, Pencil, Link2, FileCheck } from "lucide-react";
+import { ArrowLeft, Pencil, FileText, Loader2 } from "lucide-react";
 import { Button } from "@/shared/ui/Button";
-import { Modal } from "@/shared/ui/Modal";
 import { Card, CardContent } from "@/shared/ui/Card";
+import { Modal } from "@/shared/ui/Modal";
 import { cn } from "@/shared/lib/cn";
 import { MeetingStatusBadge } from "@/entities/meeting/ui/MeetingStatusBadge";
 import { MeetingDateLabel } from "@/entities/meeting/ui/MeetingDateLabel";
-import type { Meeting, MeetingUpdatePayload } from "@/entities/meeting/model";
-import type { NoteCreatePayload } from "@/entities/note/model";
-import type { Note } from "@/entities/note/model";
+import type { Meeting } from "@/entities/meeting/model";
+import type { Note, NoteCreatePayload } from "@/entities/note/model";
 import type { Participant, ParticipantCreatePayload } from "@/entities/participant/model";
-import { MOCK_MEETINGS } from "@/entities/meeting/mock";
-import { MOCK_NOTES } from "@/entities/note/mock";
-import { MOCK_PARTICIPANTS } from "@/entities/participant/mock";
-import { MOCK_PEOPLE } from "@/entities/person/mock";
-import { IS_EDITABLE } from "@/entities/meeting/constants";
-import { StartMeetingButton } from "@/features/meeting/StartMeetingButton";
-import { EndMeetingButton } from "@/features/meeting/EndMeetingButton";
-import { DeleteMeetingButton } from "@/features/meeting/DeleteMeetingButton";
-import { EditMeetingForm } from "@/features/meeting/EditMeetingForm";
 import { NotesPanel } from "@/widgets/notes-panel/NotesPanel";
 import { ParticipantsPanel } from "@/widgets/participants-panel/ParticipantsPanel";
 import { MeetingLinksPanel } from "@/widgets/meeting-links/MeetingLinksPanel";
 import { MeetingPrepPanel } from "@/widgets/meeting-prep/MeetingPrepPanel";
+import { StartMeetingButton } from "@/features/meeting/StartMeetingButton";
+import { EndMeetingButton } from "@/features/meeting/EndMeetingButton";
+import { DeleteMeetingButton } from "@/features/meeting/DeleteMeetingButton";
+import { EditMeetingForm } from "@/features/meeting/EditMeetingForm";
+import {
+  fetchMeetingById,
+  updateMeeting,
+  deleteMeeting,
+  addNote,
+  deleteNote as apiDeleteNote,
+  addParticipant,
+  removeParticipant,
+} from "@/services/meetingService";
+import type { MeetingDetail, NoteDto, ParticipantDto } from "@/types/api";
 
-type DetailTab = "notes" | "participants" | "links" | "info" | "minutes" | "prep";
+type TabKey = "notes" | "participants" | "links" | "info" | "minutes" | "prep";
 
-const TABS: { key: DetailTab; label: string; icon: React.ReactNode }[] = [
-  { key: "notes", label: "Notlar", icon: undefined! },
-  { key: "participants", label: "Katılımcılar", icon: undefined! },
-  { key: "links", label: "Bağlantılar", icon: <Link2 className="h-3.5 w-3.5" /> },
-  { key: "info", label: "Bilgiler", icon: undefined! },
-  { key: "minutes", label: "Tutanak", icon: <FileText className="h-3.5 w-3.5" /> },
-  { key: "prep", label: "Hazırlık", icon: <FileCheck className="h-3.5 w-3.5" /> },
+const TABS: { key: TabKey; label: string; icon: React.ReactNode }[] = [
+  { key: "notes", label: "Notlar", icon: <FileText className="h-4 w-4" /> },
+  { key: "participants", label: "Katılımcılar", icon: null },
+  { key: "links", label: "Bağlı Toplantılar", icon: null },
+  { key: "info", label: "Detaylar", icon: null },
+  { key: "minutes", label: "Tutanak", icon: null },
+  { key: "prep", label: "Hazırlık", icon: null },
 ];
+
+/** API MeetingDetail → local Meeting */
+function toMeeting(d: MeetingDetail): Meeting {
+  return {
+    id: d.id, title: d.title, description: d.description ?? "",
+    subject: d.subject ?? undefined, meetingDate: d.meetingDate,
+    plannedStart: d.plannedStart, status: d.status as MeetingStatus,
+    statusDisplay: d.statusDisplay, version: d.version,
+    projectId: d.projectId, projectName: d.projectName,
+    companyId: d.companyId, companyName: d.companyName,
+    locationId: d.locationId, locationName: d.locationName,
+    categoryId: d.categoryId, categoryName: d.categoryName,
+    startedAt: d.startedAt, endedAt: d.endedAt,
+    nextMeetingAt: d.nextMeetingAt, nextMeetingNote: d.nextMeetingNote ?? undefined,
+    createdAt: d.createdAt, updatedAt: d.updatedAt,
+  };
+}
+
+function toNote(n: NoteDto): Note {
+  return {
+    id: n.id, meetingId: 0, content: n.content,
+    noteType: n.noteType as Note["noteType"],
+    noteTypeDisplay: n.noteTypeDisplay, displayOrder: n.displayOrder,
+    responsiblePersonId: n.responsiblePersonId,
+    responsiblePersonName: n.responsiblePersonName ?? undefined,
+    dueDate: n.dueDate, actionStatus: n.actionStatus as Note["actionStatus"],
+    actionStatusDisplay: n.actionStatusDisplay ?? undefined,
+    createdAt: n.createdAt, updatedAt: n.createdAt,
+  };
+}
+
+function toParticipant(p: ParticipantDto): Participant {
+  return {
+    id: p.id, personId: p.personId, personName: p.personName,
+    companyName: p.companyName ?? undefined, role: p.role as Participant["role"],
+    roleDisplay: p.roleDisplay, createdAt: "", updatedAt: "",
+  };
+}
 
 export function MeetingDetailPage() {
   const { id } = useParams<{ id: string }>();
   const navigate = useNavigate();
   const meetingId = Number(id);
 
-  const [meetings, setMeetings] = useState<Meeting[]>(MOCK_MEETINGS);
-  const [notes, setNotes] = useState<Note[]>(MOCK_NOTES);
-  const [participants, setParticipants] = useState<Participant[]>(MOCK_PARTICIPANTS);
+  const [meeting, setMeeting] = useState<Meeting | null>(null);
+  const [notes, setNotes] = useState<Note[]>([]);
+  const [participants, setParticipants] = useState<Participant[]>([]);
+  const [activeTab, setActiveTab] = useState<TabKey>("notes");
   const [showEdit, setShowEdit] = useState(false);
-  const [activeTab, setActiveTab] = useState<DetailTab>("notes");
+  const [isLoading, setIsLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
 
-  const meeting = meetings.find((m) => m.id === meetingId);
-  const meetingNotes = notes.filter((n) => n.meetingId === meetingId);
-  const meetingParticipants = participants.filter((p) => p.meetingId === meetingId);
+  const load = useCallback(async () => {
+    try {
+      setIsLoading(true);
+      setError(null);
+      const detail = await fetchMeetingById(meetingId);
+      setMeeting(toMeeting(detail));
+      setNotes(detail.notes.map(toNote));
+      setParticipants(detail.participants.map(toParticipant));
+    } catch (err) {
+      console.error("[MeetingDetailPage] Load error:", err);
+      setError("Toplantı yüklenirken hata oluştu.");
+    } finally {
+      setIsLoading(false);
+    }
+  }, [meetingId]);
 
-  if (!meeting) {
+  useEffect(() => { load(); }, [load]);
+
+  if (isLoading) {
     return (
-      <div className="flex flex-col items-center justify-center py-20">
-        <p className="text-lg text-surface-500">Toplantı bulunamadı.</p>
-        <Link to="/meetings" className="mt-4 text-brand-600 hover:underline">Toplantılar listesine dön</Link>
+      <div className="flex items-center justify-center py-24">
+        <Loader2 className="h-8 w-8 animate-spin text-brand-500" />
+        <span className="ml-3 text-surface-500">Toplantı yükleniyor…</span>
+      </div>
+    );
+  }
+  if (error || !meeting) {
+    return (
+      <div className="py-24 text-center">
+        <p className="text-danger-600">{error ?? "Toplantı bulunamadı."}</p>
+        <Button variant="outline" className="mt-4" onClick={() => navigate("/meetings")}>Geri Dön</Button>
       </div>
     );
   }
 
-  const editable = IS_EDITABLE[meeting.status];
+  const editable = meeting.status === "DRAFT" || meeting.status === "ACTIVE";
 
-  function handleStart() {
-    setMeetings((prev) => prev.map((m) => (m.id === meetingId ? { ...m, status: "ACTIVE" as const, startedAt: new Date().toISOString(), version: m.version + 1 } : m)));
+  async function handleEdit(data: any) {
+    try {
+      await updateMeeting(meetingId, data);
+      setShowEdit(false);
+      await load();
+    } catch (err) { console.error("[MeetingDetail] Edit error:", err); }
   }
-  function handleEnd() {
-    setMeetings((prev) => prev.map((m) => (m.id === meetingId ? { ...m, status: "COMPLETED" as const, ended_at: new Date().toISOString(), version: m.version + 1 } : m)));
+
+  async function handleStart() {
+    try {
+      await updateMeeting(meetingId, { ...meeting!, status: "ACTIVE" } as any);
+      await load();
+    } catch (err) { console.error("[MeetingDetail] Start error:", err); }
   }
-  function handleDelete() {
-    setMeetings((prev) => prev.filter((m) => m.id !== meetingId));
-    navigate("/meetings", { replace: true });
+
+  async function handleEnd() {
+    try {
+      await updateMeeting(meetingId, { ...meeting!, status: "COMPLETED" } as any);
+      await load();
+    } catch (err) { console.error("[MeetingDetail] End error:", err); }
   }
-  function handleEdit(data: MeetingUpdatePayload) {
-    setMeetings((prev) => prev.map((m) => (m.id === meetingId ? { ...m, ...data, status: (data as any).status as MeetingStatus ?? m.status, updatedAt: new Date().toISOString() } : m)));
-    setShowEdit(false);
+
+  async function handleDelete() {
+    try {
+      await deleteMeeting(meetingId);
+      navigate("/meetings");
+    } catch (err) { console.error("[MeetingDetail] Delete error:", err); }
   }
-  function handleReorderNotes(reorderedNotes: Note[]) {
+
+  function handleReorderNotes(noteId: number, direction: "up" | "down") {
     setNotes((prev) => {
-      // Find notes that do NOT belong to this meeting
-      const otherNotes = prev.filter(n => n.meetingId !== meetingId);
-      // Combine them with the reordered notes for this meeting
-      return [...otherNotes, ...reorderedNotes];
+      const idx = prev.findIndex((n) => n.id === noteId);
+      if (idx < 0) return prev;
+      const swapIdx = direction === "up" ? idx - 1 : idx + 1;
+      if (swapIdx < 0 || swapIdx >= prev.length) return prev;
+      const next = [...prev];
+      const temp = next[idx]; next[idx] = next[swapIdx]!; next[swapIdx] = temp!;
+      return next;
     });
   }
 
-  function handleAddNote(data: NoteCreatePayload) {
-    const newNote: Note = { id: Date.now(), meetingId: meetingId, content: data.content, noteType: data.noteType || "NOTE", displayOrder: meetingNotes.length + 1, responsiblePersonId: data.responsiblePersonId, responsiblePersonName: data.responsiblePersonId ? "Sorumlu Kişi" : undefined, dueDate: data.dueDate, actionStatus: data.actionStatus, createdAt: new Date().toISOString(), updatedAt: new Date().toISOString() };
-    setNotes((prev) => [...prev, newNote]);
+  async function handleAddNote(data: NoteCreatePayload) {
+    try {
+      await addNote(meetingId, {
+        content: data.content,
+        noteType: data.noteType,
+        displayOrder: notes.length + 1,
+        responsiblePersonId: data.responsiblePersonId ?? undefined,
+        dueDate: data.dueDate ?? undefined,
+        actionStatus: data.actionStatus,
+      });
+      await load();
+    } catch (err) { console.error("[MeetingDetail] AddNote error:", err); }
   }
-  function handleDeleteNote(noteId: number) { setNotes((prev) => prev.filter((n) => n.id !== noteId)); }
-  function handleAddParticipant(data: ParticipantCreatePayload) {
-    // Resolve person data from the people pool
-    const person = MOCK_PEOPLE.find((p) => p.id === data.personId);
-    const newP: Participant = {
-      id: Date.now(),
-      meetingId: meetingId,
-      personId: data.personId,
-      personName: person?.fullName ?? "Bilinmeyen",
-      email: person?.email ?? "",
-      avatarUrl: null,
-      title: person?.title ?? "",
-      companyName: person?.companyName,
-      role: data.role ?? "ATTENDEE",
-      createdAt: new Date().toISOString(),
-      updatedAt: new Date().toISOString(),
-    };
-    setParticipants((prev) => [...prev, newP]);
+
+  async function handleDeleteNote(noteId: number) {
+    try {
+      await apiDeleteNote(meetingId, noteId);
+      setNotes((prev) => prev.filter((n) => n.id !== noteId));
+    } catch (err) { console.error("[MeetingDetail] DeleteNote error:", err); }
   }
-  function handleRemoveParticipant(participantId: number) { setParticipants((prev) => prev.filter((p) => p.id !== participantId)); }
+
+  async function handleAddParticipant(data: ParticipantCreatePayload) {
+    try {
+      await addParticipant(meetingId, { personId: data.personId, role: data.role });
+      await load();
+    } catch (err) { console.error("[MeetingDetail] AddParticipant error:", err); }
+  }
+
+  async function handleRemoveParticipant(participantId: number) {
+    try {
+      await removeParticipant(meetingId, participantId);
+      setParticipants((prev) => prev.filter((p) => p.id !== participantId));
+    } catch (err) { console.error("[MeetingDetail] RemoveParticipant error:", err); }
+  }
 
   return (
     <div className="space-y-6">
@@ -151,18 +245,18 @@ export function MeetingDetailPage() {
             className={cn("flex items-center gap-1.5 whitespace-nowrap rounded-lg px-4 py-2 text-sm font-medium transition-all duration-150",
               activeTab === tab.key ? "bg-white text-brand-700 shadow-sm dark:bg-surface-700 dark:text-brand-400" : "text-surface-500 hover:text-surface-700 dark:text-surface-400 dark:hover:text-surface-200")}>
             {tab.icon} {tab.label}
-            {tab.key === "notes" && <span className="ml-1 rounded-full bg-surface-200 px-1.5 py-0.5 text-2xs dark:bg-surface-600">{meetingNotes.length}</span>}
-            {tab.key === "participants" && <span className="ml-1 rounded-full bg-surface-200 px-1.5 py-0.5 text-2xs dark:bg-surface-600">{meetingParticipants.length}</span>}
+            {tab.key === "notes" && <span className="ml-1 rounded-full bg-surface-200 px-1.5 py-0.5 text-2xs dark:bg-surface-600">{notes.length}</span>}
+            {tab.key === "participants" && <span className="ml-1 rounded-full bg-surface-200 px-1.5 py-0.5 text-2xs dark:bg-surface-600">{participants.length}</span>}
           </button>
         ))}
       </div>
 
       {/* Tab content */}
       {activeTab === "notes" && (
-        <NotesPanel notes={meetingNotes} meetingId={meetingId} editable={editable} onAddNote={handleAddNote} onDeleteNote={handleDeleteNote} onReorderNotes={handleReorderNotes} />
+        <NotesPanel notes={notes} meetingId={meetingId} editable={editable} onAddNote={handleAddNote} onDeleteNote={handleDeleteNote} onReorderNotes={handleReorderNotes as any} />
       )}
       {activeTab === "participants" && (
-        <ParticipantsPanel participants={meetingParticipants} meetingId={meetingId} editable={editable} onAdd={handleAddParticipant} onRemove={handleRemoveParticipant} />
+        <ParticipantsPanel participants={participants} meetingId={meetingId} editable={editable} onAdd={handleAddParticipant} onRemove={handleRemoveParticipant} />
       )}
       {activeTab === "links" && <MeetingLinksPanel meeting={meeting} />}
       {activeTab === "info" && (
@@ -190,7 +284,7 @@ export function MeetingDetailPage() {
           <Link to={`/meetings/${meetingId}/minutes`}><Button variant="primary" className="mt-4">Önizlemeye Git</Button></Link>
         </CardContent></Card>
       )}
-      {activeTab === "prep" && <MeetingPrepPanel meetingId={meetingId} previousNotes={notes.filter((n) => n.meetingId !== meetingId && (n.noteType === "TASK" || n.noteType === "DECISION"))} />}
+      {activeTab === "prep" && <MeetingPrepPanel meetingId={meetingId} previousNotes={notes.filter((n) => n.noteType === "TASK" || n.noteType === "DECISION")} />}
 
       {/* Edit modal */}
       <Modal isOpen={showEdit} onClose={() => setShowEdit(false)} title="Toplantıyı Düzenle" size="lg">

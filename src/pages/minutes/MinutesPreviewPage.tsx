@@ -1,132 +1,114 @@
-import { useParams, Link } from "react-router-dom";
-import { ArrowLeft, Printer } from "lucide-react";
+import { useState, useEffect } from "react";
+import { useParams, useNavigate } from "react-router-dom";
+import { ArrowLeft, Download, Printer, Loader2 } from "lucide-react";
 import { Button } from "@/shared/ui/Button";
 import { Badge } from "@/shared/ui/Badge";
 import { formatDate, formatDateTime } from "@/shared/lib/formatDate";
-import { APP_NAME } from "@/shared/config/constants";
-import { NOTE_TYPE_LABEL } from "@/shared/config/constants";
-import { MeetingStatusBadge } from "@/entities/meeting/ui/MeetingStatusBadge";
-import { MOCK_MEETINGS } from "@/entities/meeting/mock";
-import { MOCK_NOTES } from "@/entities/note/mock";
-import { MOCK_PARTICIPANTS } from "@/entities/participant/mock";
-import { PARTICIPANT_ROLE_LABEL } from "@/entities/participant/model";
-import { NOTE_TYPE_BADGE_VARIANT } from "@/entities/note/constants";
+import { NOTE_TYPE_LABEL, NOTE_TYPE_BADGE_VARIANT } from "@/entities/note/constants";
+import type { NoteType } from "@/shared/config/constants";
+import { fetchMeetingById } from "@/services/meetingService";
+import type { MeetingDetail } from "@/types/api";
 
 export function MinutesPreviewPage() {
   const { id } = useParams<{ id: string }>();
+  const navigate = useNavigate();
   const meetingId = Number(id);
 
-  const meeting = MOCK_MEETINGS.find((m) => m.id === meetingId);
-  const notes = MOCK_NOTES.filter((n) => n.meetingId === meetingId);
-  const participants = MOCK_PARTICIPANTS.filter((p) => p.meetingId === meetingId);
+  const [meeting, setMeeting] = useState<MeetingDetail | null>(null);
+  const [isLoading, setIsLoading] = useState(true);
 
-  if (!meeting) {
+  useEffect(() => {
+    (async () => {
+      try {
+        setIsLoading(true);
+        const detail = await fetchMeetingById(meetingId);
+        setMeeting(detail);
+      } catch (err) { console.error("[MinutesPreview] Load error:", err); }
+      finally { setIsLoading(false); }
+    })();
+  }, [meetingId]);
+
+  if (isLoading) {
     return (
-      <div className="flex flex-col items-center justify-center py-20">
-        <p className="text-lg text-surface-500">Toplantı bulunamadı.</p>
-        <Link to="/meetings" className="mt-4 text-brand-600 hover:underline">
-          Listeye dön
-        </Link>
+      <div className="flex items-center justify-center py-24">
+        <Loader2 className="h-8 w-8 animate-spin text-brand-500" />
+        <span className="ml-3 text-surface-500">Tutanak yükleniyor…</span>
       </div>
     );
   }
 
+  if (!meeting) {
+    return (
+      <div className="py-24 text-center">
+        <p className="text-danger-600">Toplantı bulunamadı.</p>
+        <Button variant="outline" className="mt-4" onClick={() => navigate("/meetings")}>Geri Dön</Button>
+      </div>
+    );
+  }
+
+  const notes = meeting.notes;
+  const participants = meeting.participants;
   const decisions = notes.filter((n) => n.noteType === "DECISION");
   const tasks = notes.filter((n) => n.noteType === "TASK");
   const infoNotes = notes.filter((n) => n.noteType === "INFO" || n.noteType === "NOTE");
 
   return (
-    <div className="space-y-6">
-      {/* Toolbar - hidden in print */}
+    <div className="mx-auto max-w-4xl space-y-6 print:max-w-none">
+      {/* Actions (hidden during print) */}
       <div className="flex items-center justify-between print:hidden">
-        <Link to={`/meetings/${meetingId}`}>
-          <Button variant="ghost" size="sm" icon={<ArrowLeft className="h-4 w-4" />}>
-            Detaya Dön
-          </Button>
-        </Link>
-        <Button
-          variant="primary"
-          size="sm"
-          icon={<Printer className="h-4 w-4" />}
-          onClick={() => window.print()}
-        >
-          Yazdır
+        <Button variant="ghost" size="sm" icon={<ArrowLeft className="h-4 w-4" />} onClick={() => navigate(`/meetings/${meetingId}`)}>
+          Toplantıya Dön
         </Button>
+        <div className="flex gap-2">
+          <Button variant="outline" size="sm" icon={<Download className="h-4 w-4" />}>PDF İndir</Button>
+          <Button variant="outline" size="sm" icon={<Printer className="h-4 w-4" />} onClick={() => window.print()}>Yazdır</Button>
+        </div>
       </div>
 
-      {/* Printable document */}
-      <div className="mx-auto max-w-3xl rounded-xl border border-surface-200 bg-white p-8 shadow-card print:border-none print:shadow-none print:p-0 dark:border-surface-700 dark:bg-surface-800">
-
-        {/* ── Header: Toplantı Bilgileri (tablo formatında) ────────── */}
-        <div className="mb-8">
-          <div className="flex items-center justify-between mb-4">
-            <h1 className="text-xs font-semibold uppercase tracking-widest text-brand-600">
-              {APP_NAME}
-            </h1>
-            <MeetingStatusBadge status={meeting.status} />
+      {/* Tutanak Document */}
+      <div className="rounded-xl border border-surface-200 bg-white p-8 shadow-card dark:border-surface-700 dark:bg-surface-800 print:border-0 print:shadow-none print:p-0">
+        {/* Header */}
+        <header className="mb-8 border-b border-surface-200 pb-6 dark:border-surface-700">
+          <div className="flex items-start justify-between">
+            <div>
+              <h1 className="text-2xl font-bold text-surface-900 dark:text-surface-50">
+                {meeting.title}
+              </h1>
+              <p className="mt-2 text-sm text-surface-500">
+                <span className="font-medium text-surface-900 dark:text-surface-50">TOPLANTI TUTANAĞI</span>
+              </p>
+            </div>
+            <div className="text-right text-sm text-surface-500 dark:text-surface-400">
+              <p>{formatDate(meeting.meetingDate, "weekday")}</p>
+              <p>{meeting.plannedStart ? `Saat: ${meeting.plannedStart}` : ""}</p>
+              {meeting.locationName && <p>Yer: {meeting.locationName}</p>}
+            </div>
           </div>
-
-          <table className="w-full text-sm border-collapse">
-            <tbody>
-              <tr className="border-b border-surface-200 dark:border-surface-700">
-                <td className="py-2.5 pr-4 font-semibold text-surface-600 dark:text-surface-400 whitespace-nowrap w-40">
-                  Toplantının Konusu
-                </td>
-                <td className="py-2.5 text-surface-900 dark:text-surface-50 font-bold text-lg">
-                  {meeting.title}
-                </td>
-              </tr>
-              {meeting.locationName && (
-                <tr className="border-b border-surface-200 dark:border-surface-700">
-                  <td className="py-2.5 pr-4 font-semibold text-surface-600 dark:text-surface-400 whitespace-nowrap">
-                    Toplantı Yeri
-                  </td>
-                  <td className="py-2.5 text-surface-900 dark:text-surface-50">
-                    {meeting.locationName}
-                  </td>
-                </tr>
-              )}
-              <tr className="border-b border-surface-200 dark:border-surface-700">
-                <td className="py-2.5 pr-4 font-semibold text-surface-600 dark:text-surface-400 whitespace-nowrap">
-                  Gün ve Saat
-                </td>
-                <td className="py-2.5 text-surface-900 dark:text-surface-50">
-                  {formatDate(meeting.meetingDate, "weekday")}
-                  {meeting.plannedStart ? ` — ${meeting.plannedStart}` : ""}
-                </td>
-              </tr>
-            </tbody>
-          </table>
-
           {meeting.description && (
-            <p className="mt-3 text-sm text-surface-600 dark:text-surface-400">
-              {meeting.description}
+            <p className="mt-4 text-sm leading-relaxed text-surface-600 dark:text-surface-300">
+              <span className="font-semibold">Gündem:</span> {meeting.description}
             </p>
           )}
+        </header>
 
-          <div className="mt-4 h-0.5 bg-brand-600 rounded-full" />
-        </div>
-
-        {/* ── Katılımcılar ────────────────────────────────────── */}
+        {/* Participants */}
         {participants.length > 0 && (
           <section className="mb-8">
-            <h3 className="mb-3 text-sm font-bold uppercase tracking-wider text-surface-700 dark:text-surface-300">
-              Katılımcılar
-            </h3>
+            <h2 className="mb-3 text-lg font-semibold text-surface-900 dark:text-surface-50">Katılımcılar</h2>
             <table className="w-full text-sm">
               <thead>
                 <tr className="border-b border-surface-200 dark:border-surface-700">
-                  <th className="py-2 text-left font-medium text-surface-600 dark:text-surface-400">Ad Soyad</th>
-                  <th className="py-2 text-left font-medium text-surface-600 dark:text-surface-400">Unvan</th>
-                  <th className="py-2 text-left font-medium text-surface-600 dark:text-surface-400">Rol</th>
+                  <th className="py-2 text-left font-medium text-surface-500 dark:text-surface-400">Ad Soyad</th>
+                  <th className="py-2 text-left font-medium text-surface-500 dark:text-surface-400">Firma</th>
+                  <th className="py-2 text-left font-medium text-surface-500 dark:text-surface-400">Rol</th>
                 </tr>
               </thead>
               <tbody>
                 {participants.map((p) => (
                   <tr key={p.id} className="border-b border-surface-100 dark:border-surface-700/50">
                     <td className="py-2 text-surface-900 dark:text-surface-50">{p.personName}</td>
-                    <td className="py-2 text-surface-600 dark:text-surface-400">{p.title}</td>
-                    <td className="py-2">{PARTICIPANT_ROLE_LABEL[p.role]}</td>
+                    <td className="py-2 text-surface-600 dark:text-surface-400">{p.companyName ?? "—"}</td>
+                    <td className="py-2 text-surface-600 dark:text-surface-400">{p.roleDisplay}</td>
                   </tr>
                 ))}
               </tbody>
@@ -134,89 +116,62 @@ export function MinutesPreviewPage() {
           </section>
         )}
 
-        {/* ── Toplantı Gündemi ────────────────────────────────── */}
-        <section className="mb-8">
-          <h3 className="mb-3 text-sm font-bold uppercase tracking-wider text-surface-700 dark:text-surface-300">
-            Toplantı Gündemi
-          </h3>
-          {meeting.description ? (
-            <p className="text-sm text-surface-800 dark:text-surface-200">
-              {meeting.description}
-            </p>
-          ) : (
-            <p className="text-sm text-surface-400 italic">Gündem bilgisi girilmemiş.</p>
-          )}
-        </section>
-
-        {/* ── Alınan Kararlar ─────────────────────────────────── */}
-        <section className="mb-8">
-          <h3 className="mb-3 text-sm font-bold uppercase tracking-wider text-brand-600">
-            Alınan Kararlar ({decisions.length})
-          </h3>
-          {decisions.length > 0 ? (
+        {/* Decisions */}
+        {decisions.length > 0 && (
+          <section className="mb-8">
+            <h2 className="mb-3 text-lg font-semibold text-brand-700 dark:text-brand-400">📋 Kararlar</h2>
             <ol className="list-decimal list-inside space-y-2">
               {decisions.map((n) => (
-                <li key={n.id} className="text-sm text-surface-800 dark:text-surface-200">
+                <li key={n.id} className="text-sm text-surface-800 leading-relaxed dark:text-surface-200">
                   {n.content}
                 </li>
               ))}
             </ol>
-          ) : (
-            <p className="text-sm text-surface-400 italic">Henüz karar kaydedilmemiş.</p>
-          )}
-        </section>
-
-        {/* ── Görevler ────────────────────────────────────────── */}
-        {tasks.length > 0 && (
-          <section className="mb-8">
-            <h3 className="mb-3 text-sm font-bold uppercase tracking-wider text-warning-600">
-              Görevler ({tasks.length})
-            </h3>
-            <ul className="space-y-2">
-              {tasks.map((n) => (
-                <li key={n.id} className="flex items-start gap-2 text-sm text-surface-800 dark:text-surface-200">
-                  <span className="mt-1 h-4 w-4 shrink-0 rounded border border-surface-300" />
-                  <span>
-                    {n.content}
-                    {n.responsiblePersonName && (
-                      <span className="text-surface-500"> — Sorumlu: {n.responsiblePersonName}</span>
-                    )}
-                    {n.dueDate && (
-                      <span className="text-surface-500"> · Termin: {formatDate(n.dueDate, "short")}</span>
-                    )}
-                  </span>
-                </li>
-              ))}
-            </ul>
           </section>
         )}
 
-        {/* ── Önemli Notlar & Bilgiler ─────────────────────── */}
-        {infoNotes.length > 0 && (
+        {/* Tasks */}
+        {tasks.length > 0 && (
           <section className="mb-8">
-            <h3 className="mb-3 text-sm font-bold uppercase tracking-wider text-surface-700 dark:text-surface-300">
-              Önemli Notlar ({infoNotes.length})
-            </h3>
-            <div className="space-y-3">
-              {infoNotes.map((n) => (
-                <div key={n.id} className="flex items-start gap-3">
-                  <Badge variant={NOTE_TYPE_BADGE_VARIANT[n.noteType]} size="sm">
-                    {NOTE_TYPE_LABEL[n.noteType]}
-                  </Badge>
-                  <p className="flex-1 text-sm text-surface-800 dark:text-surface-200">
-                    {n.content}
-                  </p>
+            <h2 className="mb-3 text-lg font-semibold text-warning-700 dark:text-warning-400">⚡ Görevler</h2>
+            <div className="space-y-2">
+              {tasks.map((n) => (
+                <div key={n.id} className="rounded-lg border border-surface-100 bg-surface-50 p-3 dark:border-surface-700 dark:bg-surface-800/50">
+                  <p className="text-sm text-surface-800 dark:text-surface-200">{n.content}</p>
+                  <div className="mt-1 flex flex-wrap gap-2 text-xs">
+                    {n.responsiblePersonName && (
+                      <span className="text-surface-500">Sorumlu: {n.responsiblePersonName}</span>
+                    )}
+                    {n.dueDate && (
+                      <span className="text-surface-500">Termin: {formatDate(n.dueDate, "short")}</span>
+                    )}
+                  </div>
                 </div>
               ))}
             </div>
           </section>
         )}
 
-        {/* ── Bir Sonraki Toplantı ─────────────────────────── */}
-        <section className="mb-8">
-          <h3 className="mb-3 text-sm font-bold uppercase tracking-wider text-surface-700 dark:text-surface-300">
-            Bir Sonraki Toplantı
-          </h3>
+        {/* Info Notes */}
+        {infoNotes.length > 0 && (
+          <section className="mb-8">
+            <h2 className="mb-3 text-lg font-semibold text-surface-900 dark:text-surface-50">📝 Notlar</h2>
+            <div className="space-y-3">
+              {infoNotes.map((n) => (
+                <div key={n.id} className="text-sm leading-relaxed text-surface-700 dark:text-surface-300 border-l-2 border-surface-300 pl-3 dark:border-surface-600">
+                  <Badge variant={NOTE_TYPE_BADGE_VARIANT[n.noteType as NoteType]} size="sm">
+                    {NOTE_TYPE_LABEL[n.noteType as NoteType]}
+                  </Badge>
+                  <p className="mt-1">{n.content}</p>
+                </div>
+              ))}
+            </div>
+          </section>
+        )}
+
+        {/* Next Meeting */}
+        <section className="border-t border-surface-200 pt-6 dark:border-surface-700">
+          <h2 className="mb-3 text-lg font-semibold text-surface-900 dark:text-surface-50">🔜 Sonraki Toplantı</h2>
           {meeting.nextMeetingAt ? (
             <div className="text-sm text-surface-800 dark:text-surface-200">
               <p>Tarih: {formatDateTime(meeting.nextMeetingAt)}</p>
@@ -226,11 +181,6 @@ export function MinutesPreviewPage() {
             <p className="text-sm text-surface-400 italic">Henüz planlanmadı.</p>
           )}
         </section>
-
-        {/* Footer */}
-        <div className="mt-12 border-t border-surface-200 pt-4 text-center text-xs text-surface-400 dark:border-surface-700">
-          Bu tutanak {APP_NAME} sistemi tarafından otomatik olarak oluşturulmuştur.
-        </div>
       </div>
     </div>
   );

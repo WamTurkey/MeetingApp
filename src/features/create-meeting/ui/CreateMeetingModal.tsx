@@ -29,7 +29,6 @@ import { Checkbox } from "@/shared/ui/Checkbox";
 import { CatalogModal } from "@/features/manage-catalog";
 import { useCatalog, type CatalogKind } from "@/features/manage-catalog/hooks/useCatalog";
 
-import { MOCK_MEETINGS } from "@/entities/meeting/mock";
 
 import {
   createMeetingSchema,
@@ -98,7 +97,7 @@ export function CreateMeetingModal({
   const previousMeetingId = watch("previousMeetingId");
 
   // Previous meetings list for dropdown
-  const previousMeetingOptions = MOCK_MEETINGS.map((m) => ({
+  const previousMeetingOptions = ([] as {id: number; meetingDate: string; title: string}[]).map((m) => ({
     value: m.id,
     label: `${m.meetingDate} · #${m.id} · ${m.title}`,
   }));

@@ -1,5 +1,5 @@
-import { useState, useMemo } from "react";
-import { Download, Filter } from "lucide-react";
+import { useState, useMemo, useEffect, useCallback } from "react";
+import { Download, Filter, Loader2 } from "lucide-react";
 import { Button } from "@/shared/ui/Button";
 import { SearchBar } from "@/shared/ui/SearchBar";
 import { Select } from "@/shared/ui/Select";
@@ -7,8 +7,9 @@ import { Badge } from "@/shared/ui/Badge";
 import { Card, CardContent } from "@/shared/ui/Card";
 import { cn } from "@/shared/lib/cn";
 import { formatDate } from "@/shared/lib/formatDate";
-import { ACTION_STATUS_LABEL } from "@/shared/config/constants";
-import { MOCK_FOLLOWUPS } from "@/entities/followup/mock";
+import { ACTION_STATUS_LABEL, type ActionStatus } from "@/shared/config/constants";
+import { fetchFollowups } from "@/services/followupService";
+import type { FollowupItemDto } from "@/types/api";
 
 const PERIODS = [
   { value: "ALL", label: "Tümü" },
@@ -26,15 +27,28 @@ export function ReportsPage() {
   const [period, setPeriod] = useState("ALL");
   const [scope, setScope] = useState("ALL");
   const [search, setSearch] = useState("");
+  const [followups, setFollowups] = useState<FollowupItemDto[]>([]);
+  const [isLoading, setIsLoading] = useState(true);
+
+  const load = useCallback(async () => {
+    try {
+      setIsLoading(true);
+      const data = await fetchFollowups();
+      setFollowups(data);
+    } catch (err) { console.error("[Reports] Load error:", err); }
+    finally { setIsLoading(false); }
+  }, []);
+
+  useEffect(() => { load(); }, [load]);
 
   const rows = useMemo(() => {
     const needle = search.toLowerCase();
-    return MOCK_FOLLOWUPS.filter((f) => {
+    return followups.filter((f) => {
       if (scope === "TRACKED" && f.actionStatus === "DONE") return false;
       if (needle && !f.text.toLowerCase().includes(needle) && !(f.responsiblePersonName ?? "").toLowerCase().includes(needle)) return false;
       return true;
     });
-  }, [scope, search]);
+  }, [scope, search, followups]);
 
   return (
     <div className="space-y-6">
@@ -68,50 +82,59 @@ export function ReportsPage() {
       </Card>
 
       {/* Summary stats */}
-      <div className="grid grid-cols-2 gap-4 sm:grid-cols-4">
-        {[
-          { label: "Toplam Madde", value: rows.length, color: "text-brand-600 bg-brand-50 dark:text-brand-400 dark:bg-brand-950/50" },
-          { label: "Açık", value: rows.filter((r) => r.actionStatus === "OPEN").length, color: "text-warning-600 bg-warning-50 dark:text-warning-400 dark:bg-warning-950/50" },
-          { label: "Sürüyor", value: rows.filter((r) => r.actionStatus === "IN_PROGRESS").length, color: "text-brand-600 bg-brand-50 dark:text-brand-400 dark:bg-brand-950/50" },
-          { label: "Tamamlanan", value: rows.filter((r) => r.actionStatus === "DONE").length, color: "text-success-600 bg-success-50 dark:text-success-400 dark:bg-success-950/50" },
-        ].map((stat) => (
-          <div key={stat.label} className="rounded-xl border border-surface-200 bg-white p-4 dark:border-surface-700 dark:bg-surface-800">
-            <p className="text-xs text-surface-500 dark:text-surface-400">{stat.label}</p>
-            <p className={cn("mt-1 text-2xl font-bold", stat.color.split(" ")[0])}>{stat.value}</p>
-          </div>
-        ))}
-      </div>
-
-      {/* Report table */}
-      <Card>
-        <div className="overflow-x-auto">
-          <table className="w-full text-sm">
-            <thead>
-              <tr className="border-b border-surface-200 dark:border-surface-700">
-                <th className="px-4 py-3 text-left font-medium text-surface-500 dark:text-surface-400">Konu</th>
-                <th className="px-4 py-3 text-left font-medium text-surface-500 dark:text-surface-400">Sorumlu</th>
-                <th className="px-4 py-3 text-left font-medium text-surface-500 dark:text-surface-400">Kaynak Toplantı</th>
-                <th className="px-4 py-3 text-left font-medium text-surface-500 dark:text-surface-400">Termin</th>
-                <th className="px-4 py-3 text-left font-medium text-surface-500 dark:text-surface-400">Durum</th>
-              </tr>
-            </thead>
-            <tbody>
-              {rows.map((row) => (
-                <tr key={row.id} className="border-b border-surface-100 transition-colors hover:bg-surface-50/50 dark:border-surface-800 dark:hover:bg-surface-800/50">
-                  <td className="max-w-xs px-4 py-3 font-medium text-surface-900 truncate dark:text-surface-50">{row.text}</td>
-                  <td className="px-4 py-3 text-surface-600 dark:text-surface-400">{row.responsiblePersonName ?? "—"}</td>
-                  <td className="px-4 py-3 text-surface-500 dark:text-surface-400">{row.sourceMeetingTitle ?? "—"}</td>
-                  <td className="px-4 py-3 text-surface-500 dark:text-surface-400">{row.dueDate ? formatDate(row.dueDate, "short") : "—"}</td>
-                  <td className="px-4 py-3"><Badge variant={row.actionStatus === "DONE" ? "success" : row.actionStatus === "IN_PROGRESS" ? "warning" : "default"} size="sm">{ACTION_STATUS_LABEL[row.actionStatus]}</Badge></td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
+      {isLoading ? (
+        <div className="flex items-center justify-center py-12">
+          <Loader2 className="h-6 w-6 animate-spin text-brand-500" />
+          <span className="ml-2 text-surface-500">Yükleniyor…</span>
         </div>
-        <CardContent>
-          <p className="text-center text-xs text-surface-400">{rows.length} madde gösteriliyor</p>
-        </CardContent>
-      </Card>
+      ) : (
+        <>
+          <div className="grid grid-cols-2 gap-4 sm:grid-cols-4">
+            {[
+              { label: "Toplam Madde", value: rows.length, color: "text-brand-600 bg-brand-50 dark:text-brand-400 dark:bg-brand-950/50" },
+              { label: "Açık", value: rows.filter((r) => r.actionStatus === "OPEN").length, color: "text-warning-600 bg-warning-50 dark:text-warning-400 dark:bg-warning-950/50" },
+              { label: "Sürüyor", value: rows.filter((r) => r.actionStatus === "IN_PROGRESS").length, color: "text-brand-600 bg-brand-50 dark:text-brand-400 dark:bg-brand-950/50" },
+              { label: "Tamamlanan", value: rows.filter((r) => r.actionStatus === "DONE").length, color: "text-success-600 bg-success-50 dark:text-success-400 dark:bg-success-950/50" },
+            ].map((stat) => (
+              <div key={stat.label} className="rounded-xl border border-surface-200 bg-white p-4 dark:border-surface-700 dark:bg-surface-800">
+                <p className="text-xs text-surface-500 dark:text-surface-400">{stat.label}</p>
+                <p className={cn("mt-1 text-2xl font-bold", stat.color.split(" ")[0])}>{stat.value}</p>
+              </div>
+            ))}
+          </div>
+
+          {/* Report table */}
+          <Card>
+            <div className="overflow-x-auto">
+              <table className="w-full text-sm">
+                <thead>
+                  <tr className="border-b border-surface-200 dark:border-surface-700">
+                    <th className="px-4 py-3 text-left font-medium text-surface-500 dark:text-surface-400">Konu</th>
+                    <th className="px-4 py-3 text-left font-medium text-surface-500 dark:text-surface-400">Sorumlu</th>
+                    <th className="px-4 py-3 text-left font-medium text-surface-500 dark:text-surface-400">Kaynak Toplantı</th>
+                    <th className="px-4 py-3 text-left font-medium text-surface-500 dark:text-surface-400">Termin</th>
+                    <th className="px-4 py-3 text-left font-medium text-surface-500 dark:text-surface-400">Durum</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {rows.map((row) => (
+                    <tr key={row.id} className="border-b border-surface-100 transition-colors hover:bg-surface-50/50 dark:border-surface-800 dark:hover:bg-surface-800/50">
+                      <td className="max-w-xs px-4 py-3 font-medium text-surface-900 truncate dark:text-surface-50">{row.text}</td>
+                      <td className="px-4 py-3 text-surface-600 dark:text-surface-400">{row.responsiblePersonName ?? "—"}</td>
+                      <td className="px-4 py-3 text-surface-500 dark:text-surface-400">{row.sourceMeetingTitle ?? "—"}</td>
+                      <td className="px-4 py-3 text-surface-500 dark:text-surface-400">{row.dueDate ? formatDate(row.dueDate, "short") : "—"}</td>
+                      <td className="px-4 py-3"><Badge variant={row.actionStatus === "DONE" ? "success" : row.actionStatus === "IN_PROGRESS" ? "warning" : "default"} size="sm">{ACTION_STATUS_LABEL[row.actionStatus as ActionStatus]}</Badge></td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+            <CardContent>
+              <p className="text-center text-xs text-surface-400">{rows.length} madde gösteriliyor</p>
+            </CardContent>
+          </Card>
+        </>
+      )}
     </div>
   );
 }

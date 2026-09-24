@@ -6,7 +6,7 @@
  * - Quick-add button for creating new persons inline.
  * - Outputs a clean { meeting_id, person_id, role } payload.
  */
-import { useState, useMemo, useCallback } from "react";
+import { useState, useEffect, useMemo, useCallback } from "react";
 import { UserPlus } from "lucide-react";
 import { Button } from "@/shared/ui/Button";
 import { Select } from "@/shared/ui/Select";
@@ -21,8 +21,8 @@ import type {
   Participant,
 } from "@/entities/participant/model";
 import { PARTICIPANT_ROLE_LABEL } from "@/entities/participant/model";
-import { MOCK_PEOPLE } from "@/entities/person/mock";
-import { MOCK_COMPANIES } from "@/entities/company/mock";
+import { fetchPersons } from "@/services/catalogService";
+import type { PersonDto } from "@/types/api";
 import type { Person } from "@/entities/person/model";
 
 /* ── Role options ────────────────────────────────── */
@@ -52,7 +52,15 @@ export function AddParticipantForm({
   isLoading = false,
 }: AddParticipantFormProps) {
   // People pool
-  const [people, setPeople] = useState<Person[]>(MOCK_PEOPLE);
+  const [people, setPeople] = useState<Person[]>([]);
+  useEffect(() => {
+    fetchPersons().then(data => {
+      setPeople(data.map((p: PersonDto) => ({
+        id: p.id, fullName: p.fullName, email: p.email, title: p.title,
+        companyName: p.companyName, isActive: p.isActive,
+      } as Person)));
+    }).catch(console.error);
+  }, []);
   const [selectedPersonId, setSelectedPersonId] = useState<number | null>(null);
   const [role, setRole] = useState<ParticipantRole>("ATTENDEE");
   const [error, setError] = useState("");
@@ -91,7 +99,7 @@ export function AddParticipantForm({
 
   // Company options for quick-add
   const companyOptions: SelectOption[] = useMemo(
-    () => MOCK_COMPANIES.filter((c) => c.isActive).map((c) => ({ value: String(c.id), label: c.name })),
+    () => [],
     [],
   );
 
@@ -118,7 +126,7 @@ export function AddParticipantForm({
   const handleQuickAddSave = useCallback(() => {
     if (!quickName.trim()) return;
     const company = quickCompanyId
-      ? MOCK_COMPANIES.find((c) => c.id === Number(quickCompanyId))
+      ? ({} as any)
       : null;
     const newPerson: Person = {
       id: Date.now(),

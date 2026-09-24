@@ -1,113 +1,106 @@
-import { useState, useMemo } from "react";
+import { useState, useMemo, useEffect } from "react";
 import { useNavigate } from "react-router-dom";
-import { Search, CalendarDays, StickyNote, ClipboardCheck, ArrowRight } from "lucide-react";
+import { Search, ClipboardCheck, Calendar, Loader2 } from "lucide-react";
 import { SearchBar } from "@/shared/ui/SearchBar";
 import { Badge } from "@/shared/ui/Badge";
 import { Card, CardContent } from "@/shared/ui/Card";
 import { EmptyState } from "@/shared/ui/EmptyState";
-import { cn } from "@/shared/lib/cn";
 import { formatDate } from "@/shared/lib/formatDate";
-import { MOCK_MEETINGS } from "@/entities/meeting/mock";
-import { MOCK_NOTES } from "@/entities/note/mock";
-import { MOCK_FOLLOWUPS } from "@/entities/followup/mock";
+import { fetchMeetings } from "@/services/meetingService";
+import { fetchFollowups } from "@/services/followupService";
+import type { MeetingListItem, FollowupItemDto } from "@/types/api";
 
-type ResultKind = "meeting" | "note" | "followup";
-
-interface SearchResult {
-  kind: ResultKind;
+type ResultItem = {
+  kind: "meeting" | "followup";
   id: number;
   title: string;
   snippet: string;
   date: string;
   meetingId?: number;
-}
+};
 
-const KIND_CONFIG: Record<ResultKind, { label: string; icon: React.ReactNode; color: string }> = {
-  meeting: { label: "Toplantı", icon: <CalendarDays className="h-4 w-4" />, color: "text-brand-600 bg-brand-50 dark:text-brand-400 dark:bg-brand-950/50" },
-  note: { label: "Not", icon: <StickyNote className="h-4 w-4" />, color: "text-warning-600 bg-warning-50 dark:text-warning-400 dark:bg-warning-950/50" },
-  followup: { label: "Takip", icon: <ClipboardCheck className="h-4 w-4" />, color: "text-success-600 bg-success-50 dark:text-success-400 dark:bg-success-950/50" },
+const KIND_ICON: Record<string, React.ReactNode> = {
+  meeting: <Calendar className="h-4 w-4" />,
+  followup: <ClipboardCheck className="h-4 w-4" />,
 };
 
 export function GlobalSearchPage() {
   const navigate = useNavigate();
   const [query, setQuery] = useState("");
+  const [allMeetings, setAllMeetings] = useState<MeetingListItem[]>([]);
+  const [allFollowups, setAllFollowups] = useState<FollowupItemDto[]>([]);
+  const [isLoading, setIsLoading] = useState(true);
 
-  const results = useMemo<SearchResult[]>(() => {
-    if (query.length < 2) return [];
+  useEffect(() => {
+    (async () => {
+      try {
+        setIsLoading(true);
+        const [mData, fData] = await Promise.all([
+          fetchMeetings({ pageSize: 200 }),
+          fetchFollowups(),
+        ]);
+        setAllMeetings(mData.items);
+        setAllFollowups(fData);
+      } catch (err) { console.error("[GlobalSearch] Load error:", err); }
+      finally { setIsLoading(false); }
+    })();
+  }, []);
+
+  const results = useMemo(() => {
+    if (!query.trim()) return [];
     const needle = query.toLowerCase();
-    const out: SearchResult[] = [];
+    const out: ResultItem[] = [];
 
-    MOCK_MEETINGS.filter((m) => m.title.toLowerCase().includes(needle) || m.description.toLowerCase().includes(needle))
-      .forEach((m) => out.push({ kind: "meeting", id: m.id, title: m.title, snippet: m.description, date: m.meetingDate, meetingId: m.id }));
+    allMeetings
+      .filter((m) => m.title.toLowerCase().includes(needle))
+      .forEach((m) => out.push({ kind: "meeting", id: m.id, title: m.title, snippet: m.statusDisplay, date: m.meetingDate, meetingId: m.id }));
 
-    MOCK_NOTES.filter((n) => n.content.toLowerCase().includes(needle))
-      .forEach((n) => out.push({ kind: "note", id: n.id, title: n.content.slice(0, 80), snippet: n.content, date: n.createdAt, meetingId: n.meetingId }));
-
-    MOCK_FOLLOWUPS.filter((f) => f.text.toLowerCase().includes(needle) || (f.responsiblePersonName ?? "").toLowerCase().includes(needle))
+    allFollowups
+      .filter((f) => f.text.toLowerCase().includes(needle) || (f.responsiblePersonName ?? "").toLowerCase().includes(needle))
       .forEach((f) => out.push({ kind: "followup", id: f.id, title: f.text.slice(0, 80), snippet: f.text, date: f.dueDate ?? f.createdAt }));
 
     return out;
-  }, [query]);
-
-  function handleClick(result: SearchResult) {
-    if (result.kind === "meeting" || result.kind === "note") {
-      navigate(`/meetings/${result.meetingId}`);
-    }
-  }
+  }, [query, allMeetings, allFollowups]);
 
   return (
     <div className="space-y-6">
       <div>
-        <h1 className="text-2xl font-bold text-surface-900 dark:text-surface-50">Tüm Belgelerde Ara</h1>
-        <p className="mt-1 text-sm text-surface-500 dark:text-surface-400">Toplantılar · Notlar · Tutanaklar · Takip geçmişi</p>
+        <h1 className="text-2xl font-bold text-surface-900 dark:text-surface-50">
+          <Search className="mr-2 inline-block h-7 w-7 text-brand-500" />
+          Genel Arama
+        </h1>
+        <p className="mt-1 text-sm text-surface-500 dark:text-surface-400">Tüm toplantı ve takip konularında arayın.</p>
       </div>
 
-      {/* Big search bar */}
-      <div className="relative">
-        <SearchBar
-          value={query}
-          onChange={setQuery}
-          placeholder="Arama yapın… (en az 2 karakter)"
-        />
-      </div>
+      <SearchBar placeholder="Toplantı, not veya takip konusu ara…" value={query} onChange={setQuery} />
 
-      {/* Results */}
-      {query.length >= 2 && results.length === 0 && (
-        <EmptyState title="Sonuç bulunamadı" description={`"${query}" için eşleşen kayıt yok. Farklı anahtar kelimeler deneyin.`} icon={<Search className="h-8 w-8" />} />
-      )}
-
-      {results.length > 0 && (
-        <div className="space-y-2">
-          <p className="text-xs text-surface-400">{results.length} sonuç bulundu</p>
-          {results.map((result) => {
-            const config = KIND_CONFIG[result.kind];
-            return (
-              <Card key={`${result.kind}-${result.id}`} hoverable onClick={() => handleClick(result)} className="group">
-                <CardContent className="flex items-start gap-3">
-                  <div className={cn("flex h-9 w-9 shrink-0 items-center justify-center rounded-lg", config.color)}>{config.icon}</div>
-                  <div className="flex-1 min-w-0">
-                    <div className="mb-1 flex items-center gap-2">
-                      <Badge variant="default" size="sm">{config.label}</Badge>
-                      <span className="text-xs text-surface-400">{formatDate(result.date, "short")}</span>
-                    </div>
-                    <p className="text-sm font-medium text-surface-900 line-clamp-1 dark:text-surface-50">{result.title}</p>
-                    <p className="mt-0.5 text-xs text-surface-500 line-clamp-2 dark:text-surface-400">{result.snippet}</p>
-                  </div>
-                  <ArrowRight className="h-4 w-4 shrink-0 text-surface-300 opacity-0 transition-all group-hover:opacity-100 group-hover:translate-x-0.5 dark:text-surface-600" />
-                </CardContent>
-              </Card>
-            );
-          })}
+      {isLoading ? (
+        <div className="flex items-center justify-center py-12">
+          <Loader2 className="h-6 w-6 animate-spin text-brand-500" />
+          <span className="ml-2 text-surface-500">Veriler yükleniyor…</span>
         </div>
-      )}
-
-      {query.length < 2 && (
-        <div className="flex flex-col items-center justify-center py-16 text-center">
-          <div className="mb-4 flex h-16 w-16 items-center justify-center rounded-2xl bg-surface-100 text-surface-400 dark:bg-surface-800">
-            <Search className="h-8 w-8" />
-          </div>
-          <p className="text-sm text-surface-500 dark:text-surface-400">Toplantı başlığı, not içeriği veya takip konusu arayın</p>
-          <p className="mt-1 text-xs text-surface-400">Sonuçlar toplantı, not ve takip olarak gruplanır</p>
+      ) : query.trim() === "" ? (
+        <EmptyState title="Arama yapın" description="Aramak istediğiniz kelimeyi yukarıdaki alana yazın." icon={<Search className="h-8 w-8" />} />
+      ) : results.length === 0 ? (
+        <EmptyState title="Sonuç bulunamadı" description={`"${query}" için eşleşen kayıt yok.`} icon={<Search className="h-8 w-8" />} />
+      ) : (
+        <div className="space-y-2">
+          <p className="text-xs text-surface-400 mb-2">{results.length} sonuç bulundu</p>
+          {results.map((r) => (
+            <Card key={`${r.kind}-${r.id}`} hoverable onClick={() => r.meetingId ? navigate(`/meetings/${r.meetingId}`) : navigate("/followups")} className="group">
+              <CardContent className="flex items-start gap-3 py-3">
+                <div className="mt-0.5 text-brand-500">{KIND_ICON[r.kind]}</div>
+                <div className="flex-1 min-w-0">
+                  <div className="flex items-center gap-2">
+                    <Badge variant={r.kind === "meeting" ? "primary" : "warning"} size="sm">{r.kind === "meeting" ? "Toplantı" : "Takip"}</Badge>
+                    <span className="text-xs text-surface-400">{formatDate(r.date, "short")}</span>
+                  </div>
+                  <p className="mt-1 text-sm font-medium text-surface-900 truncate dark:text-surface-50">{r.title}</p>
+                  <p className="text-xs text-surface-500 line-clamp-1 dark:text-surface-400">{r.snippet}</p>
+                </div>
+              </CardContent>
+            </Card>
+          ))}
         </div>
       )}
     </div>

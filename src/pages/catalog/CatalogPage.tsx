@@ -1,131 +1,150 @@
-import { useState, useMemo } from "react";
-import { Users, Building2, FolderKanban, MapPin, Tag, Plus, Search, Pencil, Trash2, Archive } from "lucide-react";
-import { cn } from "@/shared/lib/cn";
-import { Button } from "@/shared/ui/Button";
-import { Input } from "@/shared/ui/Input";
+import { useState, useMemo, useEffect, useCallback } from "react";
+import { Search, Settings2, Loader2 } from "lucide-react";
+import { SearchBar } from "@/shared/ui/SearchBar";
 import { Badge } from "@/shared/ui/Badge";
-import { Card, CardContent } from "@/shared/ui/Card";
 import { EmptyState } from "@/shared/ui/EmptyState";
-import { Modal } from "@/shared/ui/Modal";
-import { MOCK_PEOPLE } from "@/entities/person/mock";
-import { MOCK_COMPANIES } from "@/entities/company/mock";
-import { MOCK_PROJECTS } from "@/entities/project/mock";
-import { MOCK_LOCATIONS } from "@/entities/location/mock";
-import { MOCK_CATEGORIES } from "@/entities/category/mock";
+import { cn } from "@/shared/lib/cn";
+import { CatalogModal, type CatalogKind } from "@/features/manage-catalog";
+import { fetchPersons, fetchCompanies, fetchProjects, fetchLocations, fetchCategories } from "@/services/catalogService";
+import type { PersonDto, CompanyDto, ProjectDto, LocationDto, CategoryDto } from "@/types/api";
 
-type CatalogTab = "people" | "companies" | "projects" | "locations" | "categories";
-
-const TABS: { key: CatalogTab; label: string; icon: React.ReactNode }[] = [
-  { key: "people", label: "Kişiler", icon: <Users className="h-4 w-4" /> },
-  { key: "companies", label: "Firmalar", icon: <Building2 className="h-4 w-4" /> },
-  { key: "projects", label: "Projeler", icon: <FolderKanban className="h-4 w-4" /> },
-  { key: "locations", label: "Toplantı Yerleri", icon: <MapPin className="h-4 w-4" /> },
-  { key: "categories", label: "Kategoriler", icon: <Tag className="h-4 w-4" /> },
+const TABS: { key: CatalogKind | "people"; label: string }[] = [
+  { key: "people", label: "Kişiler" },
+  { key: "companies", label: "Firmalar" },
+  { key: "projects", label: "Projeler" },
+  { key: "locations", label: "Toplantı Yerleri" },
+  { key: "categories", label: "Kategoriler" },
 ];
 
+type CatalogRow = {
+  id: number;
+  primary: string;
+  secondary: string;
+  tertiary: string;
+  isActive: boolean;
+};
+
 export function CatalogPage() {
-  const [activeTab, setActiveTab] = useState<CatalogTab>("people");
+  const [activeTab, setActiveTab] = useState<CatalogKind | "people">("people");
   const [search, setSearch] = useState("");
   const [showArchived, setShowArchived] = useState(false);
   const [showModal, setShowModal] = useState(false);
+  const [isLoading, setIsLoading] = useState(true);
 
-  const data = useMemo(() => {
+  // Raw data
+  const [people, setPeople] = useState<PersonDto[]>([]);
+  const [companies, setCompanies] = useState<CompanyDto[]>([]);
+  const [projects, setProjects] = useState<ProjectDto[]>([]);
+  const [locations, setLocations] = useState<LocationDto[]>([]);
+  const [categories, setCategories] = useState<CategoryDto[]>([]);
+
+  const loadAll = useCallback(async () => {
+    try {
+      setIsLoading(true);
+      const [p, co, pr, lo, ca] = await Promise.all([
+        fetchPersons(), fetchCompanies(), fetchProjects(), fetchLocations(), fetchCategories(),
+      ]);
+      setPeople(p); setCompanies(co); setProjects(pr); setLocations(lo); setCategories(ca);
+    } catch (err) { console.error("[Catalog] Load error:", err); }
+    finally { setIsLoading(false); }
+  }, []);
+
+  useEffect(() => { loadAll(); }, [loadAll]);
+
+  const rows: CatalogRow[] = useMemo(() => {
     const needle = search.toLowerCase();
-    const filterActive = <T extends { isActive: boolean }>(items: T[]) =>
-      items.filter((i) => (showArchived || i.isActive) && JSON.stringify(i).toLowerCase().includes(needle));
+
+    function filterActive<T extends { isActive: boolean }>(items: T[]): T[] {
+      return items.filter((i) => (showArchived || i.isActive) && JSON.stringify(i).toLowerCase().includes(needle));
+    }
 
     switch (activeTab) {
-      case "people": return filterActive(MOCK_PEOPLE).map((p) => ({ id: p.id, primary: p.fullName, secondary: `${p.companyName ?? "—"} · ${p.title}`, tertiary: p.email, isActive: p.isActive }));
-      case "companies": return filterActive(MOCK_COMPANIES).map((c) => ({ id: c.id, primary: c.name, secondary: c.shortName, tertiary: "", isActive: c.isActive }));
-      case "projects": return filterActive(MOCK_PROJECTS).map((p) => ({ id: p.id, primary: p.name, secondary: p.code, tertiary: "", isActive: p.isActive }));
-      case "locations": return filterActive(MOCK_LOCATIONS).map((l) => ({ id: l.id, primary: l.name, secondary: "", tertiary: "", isActive: l.isActive }));
-      case "categories": return filterActive(MOCK_CATEGORIES).map((c) => ({ id: c.id, primary: c.name, secondary: "", tertiary: "", isActive: c.isActive }));
+      case "people": return filterActive(people).map((p) => ({ id: p.id, primary: p.fullName, secondary: `${p.companyName ?? "—"} · ${p.title}`, tertiary: p.email ?? '', isActive: p.isActive }));
+      case "companies": return filterActive(companies).map((c) => ({ id: c.id, primary: c.name, secondary: c.shortName ?? "", tertiary: "", isActive: c.isActive }));
+      case "projects": return filterActive(projects).map((p) => ({ id: p.id, primary: p.name, secondary: p.code ?? "", tertiary: "", isActive: p.isActive }));
+      case "locations": return filterActive(locations).map((l) => ({ id: l.id, primary: l.name, secondary: "", tertiary: "", isActive: l.isActive }));
+      case "categories": return filterActive(categories).map((c) => ({ id: c.id, primary: c.name, secondary: "", tertiary: "", isActive: c.isActive }));
     }
-  }, [activeTab, search, showArchived]);
+  }, [activeTab, search, showArchived, people, companies, projects, locations, categories]);
 
   return (
     <div className="space-y-6">
-      <div>
-        <h1 className="text-2xl font-bold text-surface-900 dark:text-surface-50">Kişiler ve Tanımlar</h1>
-        <p className="mt-1 text-sm text-surface-500 dark:text-surface-400">Bir kez kaydedin; katılımcıları ve bilgilerini sonraki toplantılarda hazır kullanın.</p>
+      {/* Header */}
+      <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
+        <div>
+          <h1 className="text-2xl font-bold text-surface-900 dark:text-surface-50">
+            <Settings2 className="mr-2 inline-block h-7 w-7 text-brand-500" />
+            Katalog Yönetimi
+          </h1>
+          <p className="mt-1 text-sm text-surface-500 dark:text-surface-400">Kişiler, firmalar, projeler ve diğer referans verilerini yönetin.</p>
+        </div>
       </div>
 
-      {/* Tab navigation */}
-      <div className="flex flex-wrap gap-1 rounded-xl bg-surface-100 p-1 dark:bg-surface-800">
+      {/* Tabs */}
+      <div className="flex gap-1 overflow-x-auto rounded-xl bg-surface-100 p-1 dark:bg-surface-800">
         {TABS.map((tab) => (
-          <button key={tab.key} onClick={() => { setActiveTab(tab.key); setSearch(""); }}
-            className={cn("flex items-center gap-2 rounded-lg px-4 py-2 text-sm font-medium transition-all duration-150",
-              activeTab === tab.key ? "bg-white text-brand-700 shadow-sm dark:bg-surface-700 dark:text-brand-400" : "text-surface-500 hover:text-surface-700 dark:text-surface-400 dark:hover:text-surface-200")}>
-            {tab.icon} {tab.label}
+          <button key={tab.key} onClick={() => setActiveTab(tab.key)}
+            className={cn("whitespace-nowrap rounded-lg px-4 py-2 text-sm font-medium transition-all",
+              activeTab === tab.key ? "bg-white text-brand-700 shadow-sm dark:bg-surface-700 dark:text-brand-400" : "text-surface-500 hover:text-surface-700 dark:text-surface-400")}>
+            {tab.label}
           </button>
         ))}
       </div>
 
-      {/* Controls */}
+      {/* Search + controls */}
       <div className="flex flex-col gap-3 sm:flex-row sm:items-center">
-        <div className="relative flex-1">
-          <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-surface-400" />
-          <Input placeholder="Kayıtlarda ara…" value={search} onChange={(e) => setSearch(e.target.value)} className="pl-10" />
-        </div>
-        <label className="flex items-center gap-2 text-sm text-surface-500 dark:text-surface-400 cursor-pointer select-none">
+        <SearchBar value={search} onChange={setSearch} placeholder="İsim, kod veya firma ara…" className="sm:max-w-xs" />
+        <label className="flex items-center gap-2 text-xs text-surface-500 cursor-pointer">
           <input type="checkbox" checked={showArchived} onChange={(e) => setShowArchived(e.target.checked)} className="rounded border-surface-300" />
-          Arşivdekileri göster
+          Arşivlenenleri de göster
         </label>
-        <Button variant="primary" icon={<Plus className="h-4 w-4" />} onClick={() => setShowModal(true)}>Yeni Kayıt</Button>
       </div>
 
-      {/* Table */}
-      {data.length === 0 ? (
-        <EmptyState title="Kayıt bulunamadı" description="Arama kriterlerinize uygun kayıt yok." icon={<Search className="h-8 w-8" />} />
+      {/* Loading */}
+      {isLoading ? (
+        <div className="flex items-center justify-center py-16">
+          <Loader2 className="h-6 w-6 animate-spin text-brand-500" />
+          <span className="ml-2 text-surface-500">Katalog yükleniyor…</span>
+        </div>
+      ) : rows.length === 0 ? (
+        <EmptyState title="Kayıt bulunamadı" description="Aramanıza uygun sonuç yok." icon={<Search className="h-8 w-8" />} />
       ) : (
-        <Card>
-          <div className="overflow-x-auto">
-            <table className="w-full text-sm">
-              <thead>
-                <tr className="border-b border-surface-200 dark:border-surface-700">
-                  <th className="px-4 py-3 text-left font-medium text-surface-500 dark:text-surface-400">Ad</th>
-                  <th className="px-4 py-3 text-left font-medium text-surface-500 dark:text-surface-400">Detay</th>
-                  <th className="px-4 py-3 text-left font-medium text-surface-500 dark:text-surface-400">İletişim</th>
-                  <th className="px-4 py-3 text-left font-medium text-surface-500 dark:text-surface-400">Durum</th>
-                  <th className="px-4 py-3 text-right font-medium text-surface-500 dark:text-surface-400">İşlem</th>
+        <div className="overflow-x-auto rounded-xl border border-surface-200 bg-white dark:border-surface-700 dark:bg-surface-800">
+          <table className="w-full text-sm">
+            <thead>
+              <tr className="border-b border-surface-200 dark:border-surface-700">
+                <th className="px-4 py-3 text-left font-medium text-surface-500 dark:text-surface-400">Ad</th>
+                <th className="px-4 py-3 text-left font-medium text-surface-500 dark:text-surface-400">Detay</th>
+                <th className="px-4 py-3 text-left font-medium text-surface-500 dark:text-surface-400">Ek Bilgi</th>
+                <th className="px-4 py-3 text-left font-medium text-surface-500 dark:text-surface-400">Durum</th>
+              </tr>
+            </thead>
+            <tbody>
+              {rows.map((row) => (
+                <tr key={row.id} className="border-b border-surface-100 transition-colors hover:bg-surface-50/50 dark:border-surface-800 dark:hover:bg-surface-800/50">
+                  <td className="px-4 py-3 font-medium text-surface-900 dark:text-surface-50">{row.primary}</td>
+                  <td className="px-4 py-3 text-surface-600 dark:text-surface-400">{row.secondary || "—"}</td>
+                  <td className="px-4 py-3 text-surface-500 dark:text-surface-400">{row.tertiary || "—"}</td>
+                  <td className="px-4 py-3">
+                    <Badge variant={row.isActive ? "success" : "default"} size="sm">{row.isActive ? "Aktif" : "Arşiv"}</Badge>
+                  </td>
                 </tr>
-              </thead>
-              <tbody>
-                {data.map((row) => (
-                  <tr key={row.id} className="border-b border-surface-100 transition-colors hover:bg-surface-50/50 dark:border-surface-800 dark:hover:bg-surface-800/50">
-                    <td className="px-4 py-3 font-medium text-surface-900 dark:text-surface-50">{row.primary}</td>
-                    <td className="px-4 py-3 text-surface-600 dark:text-surface-400">{row.secondary || "—"}</td>
-                    <td className="px-4 py-3 text-surface-500 dark:text-surface-400">{row.tertiary || "—"}</td>
-                    <td className="px-4 py-3">
-                      <Badge variant={row.isActive ? "success" : "default"} size="sm">{row.isActive ? "Aktif" : "Arşiv"}</Badge>
-                    </td>
-                    <td className="px-4 py-3 text-right">
-                      <div className="flex items-center justify-end gap-1">
-                        <Button variant="ghost" size="sm" icon={<Pencil className="h-3.5 w-3.5" />} aria-label="Düzenle" />
-                        <Button variant="ghost" size="sm" icon={<Archive className="h-3.5 w-3.5" />} aria-label="Arşivle" />
-                        <Button variant="ghost" size="sm" icon={<Trash2 className="h-3.5 w-3.5 text-danger-500" />} aria-label="Sil" />
-                      </div>
-                    </td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-          </div>
-          <CardContent>
-            <p className="text-center text-xs text-surface-400">{data.length} kayıt gösteriliyor</p>
-          </CardContent>
-        </Card>
+              ))}
+            </tbody>
+          </table>
+          <div className="p-3 text-center text-xs text-surface-400">{rows.length} kayıt gösteriliyor</div>
+        </div>
       )}
 
-      <Modal isOpen={showModal} onClose={() => setShowModal(false)} title={`Yeni ${TABS.find((t) => t.key === activeTab)?.label ?? "Kayıt"}`} size="md">
-        <div className="space-y-4 py-2">
-          <Input label="Ad" placeholder="Kayıt adını girin…" />
-          <div className="flex justify-end gap-2">
-            <Button variant="outline" onClick={() => setShowModal(false)}>İptal</Button>
-            <Button variant="primary" onClick={() => setShowModal(false)}>Kaydet</Button>
-          </div>
-        </div>
-      </Modal>
+      {/* Catalog Modal for add/edit */}
+      {activeTab !== "people" && (
+        <CatalogModal
+          kind={activeTab as CatalogKind}
+          isOpen={showModal}
+          onClose={() => setShowModal(false)}
+          onCreated={() => { setShowModal(false); loadAll(); }}
+        />
+      )}
     </div>
   );
 }

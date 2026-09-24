@@ -6,7 +6,6 @@ import { Button } from "@/shared/ui/Button";
 import { formatDate } from "@/shared/lib/formatDate";
 import { RELATION_LABEL, type RelationType } from "@/shared/config/constants";
 import type { Meeting } from "@/entities/meeting/model";
-import { MOCK_MEETINGS } from "@/entities/meeting/mock";
 import { useState } from "react";
 import { ComboBox } from "@/shared/ui/ComboBox";
 
@@ -20,7 +19,7 @@ export function MeetingLinksPanel({ meeting }: MeetingLinksPanelProps) {
   const following: any[] = [];
   const [selectedPrev, setSelectedPrev] = useState<number | null>(null);
 
-  const previousMeetingOptions = MOCK_MEETINGS
+  const previousMeetingOptions = ([] as any[])
     .filter((m) => m.id !== meeting.id)
     .map((m) => ({
       value: m.id,
@@ -29,7 +28,7 @@ export function MeetingLinksPanel({ meeting }: MeetingLinksPanelProps) {
     }));
 
   const linkedPrevMeeting = selectedPrev 
-    ? MOCK_MEETINGS.find((m) => m.id === selectedPrev) 
+    ? ([] as any[]).find((m) => m.id === selectedPrev) 
     : null;
 
   return (

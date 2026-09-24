@@ -1,3 +1,4 @@
+import React from "react";
 /**
  * AddNoteForm — add a new note/minute to a meeting.
  *
@@ -14,7 +15,8 @@ import { Input } from "@/shared/ui/Input";
 import { NOTE_TYPE_OPTIONS } from "@/entities/note/constants";
 import type { NoteCreatePayload } from "@/entities/note/model";
 import type { NoteType, ActionStatus } from "@/shared/config/constants";
-import { MOCK_PEOPLE } from "@/entities/person/mock";
+import { fetchPersons } from "@/services/catalogService";
+import type { PersonDto } from "@/types/api";
 
 const STATUS_OPTIONS = [
   { value: "", label: "Seçilmedi" },
@@ -24,13 +26,7 @@ const STATUS_OPTIONS = [
   { value: "CANCELLED", label: "İptal" },
 ];
 
-const RESPONSIBLE_OPTIONS = [
-  { value: "", label: "Seçilmedi" },
-  ...MOCK_PEOPLE.filter((p) => p.isActive).map((p) => ({
-    value: p.id.toString(),
-    label: p.fullName,
-  })),
-];
+// RESPONSIBLE_OPTIONS is now computed inside the component using personOptions hook
 
 export interface AddNoteFormProps {
   meetingId: number;
@@ -39,12 +35,27 @@ export interface AddNoteFormProps {
   isLoading?: boolean;
 }
 
+function usePersonOptions() {
+  const [personOptions, setPersonOptions] = React.useState<{value: number; label: string}[]>([]);
+  React.useEffect(() => {
+    fetchPersons().then(data => {
+      setPersonOptions(data.filter(p => p.isActive).map((p: PersonDto) => ({ value: p.id, label: p.fullName })));
+    }).catch(console.error);
+  }, []);
+  return personOptions;
+}
+
 export function AddNoteForm({
   meetingId: _meetingId,
   onSubmit,
   onCancel,
   isLoading = false,
 }: AddNoteFormProps) {
+  const personOptions = usePersonOptions();
+  const RESPONSIBLE_OPTIONS = [
+    { value: "", label: "Seçilmedi" },
+    ...personOptions.map(p => ({ value: String(p.value), label: p.label })),
+  ];
   const [content, setContent] = useState("");
   const [type, setType] = useState<NoteType>("NOTE");
   const [hasDeadline, setHasDeadline] = useState(false);
