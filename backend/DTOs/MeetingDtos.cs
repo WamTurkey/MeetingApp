@@ -42,7 +42,8 @@ public record UpdateMeetingDto(
 // ──────────── Participant ────────────
 public record ParticipantDto(
     int Id, int PersonId, string PersonName, string? CompanyName,
-    string Role, string RoleDisplay);
+    string? Email, string? Phone, string? Title,
+    string Role, string RoleDisplay, bool IsAttended);
 public record AddParticipantDto(int PersonId, string Role = "ATTENDEE");
 
 // ──────────── Note ────────────
@@ -59,6 +60,9 @@ public record UpdateNoteDto(
     string Content, string NoteType, int DisplayOrder,
     int? ResponsiblePersonId, string? DueDate, string? ActionStatus);
 
+// ──────────── Reorder ────────────
+public record ReorderItemDto(string Type, int Id, int Order);
+
 // ──────────── Meeting Link ────────────
 public record MeetingLinkDto(
     int Id, int LinkedMeetingId, string LinkedMeetingTitle,
@@ -72,7 +76,7 @@ public record FollowupItemDto(
     int? ResponsibleCompanyId, string? ResponsibleCompanyName,
     string? DueDate, string ActionStatus, string ActionStatusDisplay,
     string? CompletedOn, string? WaitingReason, string? DevelopmentNote,
-    int? BlockerItemId, int? SourceMeetingId, string? SourceMeetingTitle,
+    List<int>? DependencyItemIds, int? SourceMeetingId, string? SourceMeetingTitle,
     int? SourceNoteId, int Version,
     string CreatedAt, string UpdatedAt);
 
@@ -81,7 +85,7 @@ public record CreateFollowupItemDto(
     int? ResponsiblePersonId = null, int? ResponsibleCompanyId = null,
     string? DueDate = null, string? ActionStatus = null,
     string? WaitingReason = null,
-    string? DevelopmentNote = null, int? BlockerItemId = null,
+    string? DevelopmentNote = null, List<int>? DependencyItemIds = null,
     int? SourceMeetingId = null, int? SourceNoteId = null);
 
 public record UpdateFollowupItemDto(
@@ -89,7 +93,7 @@ public record UpdateFollowupItemDto(
     int? ResponsiblePersonId, int? ResponsibleCompanyId,
     string? DueDate, string ActionStatus,
     string? CompletedOn, string? WaitingReason,
-    string? DevelopmentNote, int? BlockerItemId);
+    string? DevelopmentNote, List<int>? DependencyItemIds);
 
 // ──────────── Followup Change Log ────────────
 public record FollowupChangeLogDto(

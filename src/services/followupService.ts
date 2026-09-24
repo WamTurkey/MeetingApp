@@ -9,6 +9,7 @@ import type {
 export async function fetchFollowups(params?: {
   status?: string;
   search?: string;
+  sourceMeetingId?: number;
 }): Promise<FollowupItemDto[]> {
   const { data } = await apiClient.get<FollowupItemDto[]>("/Followups", { params });
   return data;

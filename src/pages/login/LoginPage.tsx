@@ -55,16 +55,12 @@ export function LoginPage() {
         {/* ── Left: Branding Panel ───────────────── */}
         <div className="hidden flex-1 space-y-8 lg:block">
           {/* Logo */}
-          <div className="flex items-center gap-4">
-            <div className="relative flex h-14 w-14 shrink-0 items-center justify-center rounded-2xl bg-gradient-to-br from-brand-600 via-brand-500 to-brand-700 shadow-xl shadow-brand-500/25 ring-1 ring-white/20 overflow-hidden">
-              {/* Replace src below with your uploaded logo path */}
-              {/* <img src="/logo.png" alt="Logo" className="h-full w-full object-cover" /> */}
-              <span className="text-2xl font-black text-white tracking-tight" style={{ fontFamily: "'Inter', sans-serif" }}>T</span>
-              <div className="absolute inset-0 rounded-2xl bg-gradient-to-t from-transparent to-white/10" />
+          <div className="flex flex-col gap-2">
+            <div className="flex h-16 w-auto items-center">
+              <img src="/logo.png" alt="Logo" className="h-full w-auto object-contain drop-shadow-2xl brightness-0 invert" />
             </div>
             <div>
-              <h1 className="text-2xl font-bold text-white">{APP_NAME}</h1>
-              <p className="text-sm text-slate-400">Kurumsal Toplantı Yönetimi</p>
+              <p className="text-sm text-slate-400 font-medium">Kurumsal Toplantı Yönetimi</p>
             </div>
           </div>
 
@@ -96,11 +92,8 @@ export function LoginPage() {
 
             {/* Mobile-only logo */}
             <div className="mb-8 flex flex-col items-center gap-3 lg:hidden">
-              <div className="relative flex h-16 w-16 shrink-0 items-center justify-center rounded-2xl bg-gradient-to-br from-brand-600 via-brand-500 to-brand-700 shadow-xl shadow-brand-500/25 ring-1 ring-white/20 overflow-hidden">
-                {/* Replace src below with your uploaded logo path */}
-                {/* <img src="/logo.png" alt="Logo" className="h-full w-full object-cover" /> */}
-                <span className="text-3xl font-black text-white tracking-tight" style={{ fontFamily: "'Inter', sans-serif" }}>T</span>
-                <div className="absolute inset-0 rounded-2xl bg-gradient-to-t from-transparent to-white/10" />
+              <div className="relative flex h-14 w-auto shrink-0 items-center justify-center">
+                <img src="/logo.png" alt="Logo" className="h-full w-auto object-contain brightness-0 invert" />
               </div>
               <div className="text-center">
                 <h1 className="text-2xl font-bold text-white">{APP_NAME}</h1>

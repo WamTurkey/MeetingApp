@@ -33,11 +33,12 @@ const STATUS_BADGE_VARIANT: Record<ActionStatus, "primary" | "warning" | "succes
   IN_PROGRESS: "warning",
   DONE: "success",
   CANCELLED: "default",
+  ROLLED_OVER: "default",
 };
 
 /** Compute bucket from dueDate + status */
 function computeBucket(dto: FollowupItemDto): FollowupBucket {
-  if (dto.actionStatus === "DONE" || dto.actionStatus === "CANCELLED") return "CLOSED";
+  if (dto.actionStatus === "DONE" || dto.actionStatus === "COMPLETED" || dto.actionStatus === "CANCELLED" || dto.actionStatus === "ROLLED_OVER") return "CLOSED";
   if (!dto.dueDate) return "NO_DATE";
   const now = new Date();
   const due = new Date(dto.dueDate);
@@ -57,7 +58,7 @@ function toFollowup(dto: FollowupItemDto): FollowupItem {
     responsibleCompanyName: dto.responsibleCompanyName ?? undefined,
     dueDate: dto.dueDate, actionStatus: dto.actionStatus as ActionStatus,
     actionStatusDisplay: dto.actionStatusDisplay,
-    waitingReason: dto.waitingReason ?? "", blockerItemId: dto.blockerItemId,
+    waitingReason: dto.waitingReason ?? "", dependencyItemIds: dto.dependencyItemIds ?? [],
     completedOn: dto.completedOn, developmentNote: dto.developmentNote ?? undefined,
     version: dto.version, bucket: computeBucket(dto),
     sourceMeetingId: dto.sourceMeetingId ?? undefined,

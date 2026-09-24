@@ -1,6 +1,8 @@
-import { useState, useEffect } from "react";
+import { useState, useEffect, useRef } from "react";
 import { useParams, useNavigate } from "react-router-dom";
-import { ArrowLeft, Download, Printer, Loader2 } from "lucide-react";
+import { ArrowLeft, Download, Printer, Loader2, FileSpreadsheet } from "lucide-react";
+import html2canvas from "html2canvas";
+import jsPDF from "jspdf";
 import { Button } from "@/shared/ui/Button";
 import { Badge } from "@/shared/ui/Badge";
 import { formatDate, formatDateTime } from "@/shared/lib/formatDate";
@@ -16,6 +18,8 @@ export function MinutesPreviewPage() {
 
   const [meeting, setMeeting] = useState<MeetingDetail | null>(null);
   const [isLoading, setIsLoading] = useState(true);
+  const [isExporting, setIsExporting] = useState(false);
+  const documentRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
     (async () => {
@@ -52,6 +56,56 @@ export function MinutesPreviewPage() {
   const tasks = notes.filter((n) => n.noteType === "TASK");
   const infoNotes = notes.filter((n) => n.noteType === "INFO" || n.noteType === "NOTE");
 
+  const exportToPDF = async () => {
+    if (!documentRef.current || !meeting) return;
+    try {
+      setIsExporting(true);
+      const canvas = await html2canvas(documentRef.current, { scale: 2 });
+      const imgData = canvas.toDataURL("image/png");
+      const pdf = new jsPDF({
+        orientation: "portrait",
+        unit: "mm",
+        format: "a4",
+      });
+      const pdfWidth = pdf.internal.pageSize.getWidth();
+      const pdfHeight = (canvas.height * pdfWidth) / canvas.width;
+      pdf.addImage(imgData, "PNG", 0, 0, pdfWidth, pdfHeight);
+      pdf.save(`${meeting.title || "Tutanak"}.pdf`);
+    } catch (err) {
+      console.error("PDF Export error:", err);
+    } finally {
+      setIsExporting(false);
+    }
+  };
+
+  const exportToExcel = async () => {
+    if (!meeting) return;
+    try {
+      setIsExporting(true);
+      const url = `${import.meta.env.VITE_API_BASE_URL || "/api"}/meetings/${meeting.id}/export/excel`;
+      const response = await fetch(url, {
+        method: "GET",
+        headers: {
+          Authorization: `Bearer ${localStorage.getItem("auth_token")}`,
+        }
+      });
+      if (!response.ok) throw new Error("Export failed");
+      const blob = await response.blob();
+      const downloadUrl = window.URL.createObjectURL(blob);
+      const a = document.createElement("a");
+      a.href = downloadUrl;
+      a.download = `Tutanak_${meeting.id}_${new Date().toISOString().split("T")[0]}.xlsx`;
+      document.body.appendChild(a);
+      a.click();
+      a.remove();
+      window.URL.revokeObjectURL(downloadUrl);
+    } catch (err) {
+      console.error("Excel Export error:", err);
+    } finally {
+      setIsExporting(false);
+    }
+  };
+
   return (
     <div className="mx-auto max-w-4xl space-y-6 print:max-w-none">
       {/* Actions (hidden during print) */}
@@ -60,13 +114,16 @@ export function MinutesPreviewPage() {
           Toplantıya Dön
         </Button>
         <div className="flex gap-2">
-          <Button variant="outline" size="sm" icon={<Download className="h-4 w-4" />}>PDF İndir</Button>
+          <Button variant="outline" size="sm" icon={<FileSpreadsheet className="h-4 w-4" />} onClick={exportToExcel}>Excel İndir</Button>
+          <Button variant="outline" size="sm" icon={isExporting ? <Loader2 className="h-4 w-4 animate-spin" /> : <Download className="h-4 w-4" />} onClick={exportToPDF} disabled={isExporting}>
+            {isExporting ? "İndiriliyor..." : "PDF İndir"}
+          </Button>
           <Button variant="outline" size="sm" icon={<Printer className="h-4 w-4" />} onClick={() => window.print()}>Yazdır</Button>
         </div>
       </div>
 
       {/* Tutanak Document */}
-      <div className="rounded-xl border border-surface-200 bg-white p-8 shadow-card dark:border-surface-700 dark:bg-surface-800 print:border-0 print:shadow-none print:p-0">
+      <div ref={documentRef} className="rounded-xl border border-surface-200 bg-white p-8 shadow-card dark:border-surface-700 dark:bg-surface-800 print:border-0 print:shadow-none print:p-0">
         {/* Header */}
         <header className="mb-8 border-b border-surface-200 pb-6 dark:border-surface-700">
           <div className="flex items-start justify-between">

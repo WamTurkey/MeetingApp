@@ -25,6 +25,7 @@ import { DatePicker } from "@/shared/ui/DatePicker";
 import { TimePicker } from "@/shared/ui/TimePicker";
 import { ComboBox } from "@/shared/ui/ComboBox";
 import { Checkbox } from "@/shared/ui/Checkbox";
+import { fetchMeetings } from "@/services/meetingService";
 
 import { CatalogModal } from "@/features/manage-catalog";
 import { useCatalog, type CatalogKind } from "@/features/manage-catalog/hooks/useCatalog";
@@ -87,6 +88,7 @@ export function CreateMeetingModal({
     const projects = useCatalog("projects");
   const companies = useCatalog("companies");
   const locations = useCatalog("locations");
+  const categories = useCatalog("categories");
 
   const [activeCatalog, setActiveCatalog] = useState<ActiveCatalog>(null);
   const [showAdvanced, setShowAdvanced] = useState(false);
@@ -97,7 +99,15 @@ export function CreateMeetingModal({
   const previousMeetingId = watch("previousMeetingId");
 
   // Previous meetings list for dropdown
-  const previousMeetingOptions = ([] as {id: number; meetingDate: string; title: string}[]).map((m) => ({
+  const [allMeetings, setAllMeetings] = useState<any[]>([]);
+
+  useEffect(() => {
+    if (isOpen) {
+      fetchMeetings().then(res => setAllMeetings(res.items)).catch(console.error);
+    }
+  }, [isOpen]);
+
+  const previousMeetingOptions = allMeetings.map((m) => ({
     value: m.id,
     label: `${m.meetingDate} · #${m.id} · ${m.title}`,
   }));
@@ -117,16 +127,25 @@ export function CreateMeetingModal({
   }
 
   // ── Catalog modal helpers ─────────────────────────
-  function handleCatalogCreated(kind: CatalogKind, id: number) {
-    const fieldMap: Record<CatalogKind, keyof CreateMeetingFormData> = {
-      categories: "categoryId",
-      projects: "projectId",
-      companies: "companyId",
-      locations: "locationId",
-    titles: "title" as never,
-    };
-    setValue(fieldMap[kind], id as never);
-    setActiveCatalog(null);
+  async function handleCatalogCreated(kind: CatalogKind, id?: number) {
+    // 1. O kataloğun parent (CreateMeetingModal) state'ini anında yenile
+    if (kind === "projects") await projects.refetch();
+    else if (kind === "companies") await companies.refetch();
+    else if (kind === "locations") await locations.refetch();
+    else if (kind === "categories") await categories.refetch();
+
+    // 2. Yeni eklenen bir kayıt varsa formda otomatik seç
+    if (id) {
+      const fieldMap: Record<CatalogKind, keyof CreateMeetingFormData> = {
+        categories: "categoryId",
+        projects: "projectId",
+        companies: "companyId",
+        locations: "locationId",
+        titles: "title" as never,
+      };
+      setValue(fieldMap[kind], id as never);
+      setActiveCatalog(null); // Sadece oluşturmada modalı kapat (istenirse açık da bırakılabilir ama böyle daha temiz)
+    }
   }
 
   return (
@@ -294,6 +313,26 @@ export function CreateMeetingModal({
 
             {showAdvanced && (
               <div className="mt-4 space-y-5">
+                {/* Category */}
+                <div className="rounded-lg border border-surface-200 bg-surface-50/50 p-4 dark:border-surface-700 dark:bg-surface-900/30">
+                  <Controller
+                    name="categoryId"
+                    control={control}
+                    render={({ field }) => (
+                      <ComboBox
+                        label="Toplantı Kategorisi"
+                        value={field.value}
+                        onChange={field.onChange}
+                        options={categories.options}
+                        placeholder="Kategori seçin"
+                        onAddNew={() => setActiveCatalog("categories")}
+                        addNewLabel="Kategori"
+                        disabled={isLoading}
+                      />
+                    )}
+                  />
+                </div>
+
                 {/* Next meeting */}
                 <div className="rounded-lg border border-surface-200 bg-surface-50/50 p-4 dark:border-surface-700 dark:bg-surface-900/30">
                   <Controller
@@ -447,6 +486,7 @@ export function CreateMeetingModal({
           onClose={() => setActiveCatalog(null)}
           kind={activeCatalog}
           onCreated={(id) => handleCatalogCreated(activeCatalog, id)}
+          onDeleted={() => handleCatalogCreated(activeCatalog)}
         />
       )}
     </>

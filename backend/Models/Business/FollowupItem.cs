@@ -16,10 +16,11 @@ public class FollowupItem : AuditableEntity
     public DateOnly? CompletedOn { get; set; }
     public string? WaitingReason { get; set; }
     public string? DevelopmentNote { get; set; }
-    public int? BlockerItemId { get; set; }
     public int? SourceMeetingId { get; set; }
     public int? SourceNoteId { get; set; }
+    public int DisplayOrder { get; set; }
     public int Version { get; set; }
+    public int? RolledOverFromId { get; set; }
 
     // Navigation — Audit
     public User CreatedByUser { get; set; } = null!;
@@ -30,11 +31,15 @@ public class FollowupItem : AuditableEntity
     public Person? ResponsiblePerson { get; set; }
     public Company? ResponsibleCompany { get; set; }
     public LkActionStatus ActionStatusNavigation { get; set; } = null!;
-    public FollowupItem? BlockerItem { get; set; }
     public Meeting? SourceMeeting { get; set; }
     public Note? SourceNote { get; set; }
+    public FollowupItem? RolledOverFrom { get; set; }
 
     // Navigation — Children
-    public ICollection<FollowupItem> BlockedItems { get; set; } = new List<FollowupItem>();
     public ICollection<FollowupChangeLog> ChangeLogs { get; set; } = new List<FollowupChangeLog>();
+    public ICollection<FollowupItem> RolledOverToItems { get; set; } = new List<FollowupItem>();
+    
+    // Dependencies
+    public ICollection<FollowupItemDependency> DependentOn { get; set; } = new List<FollowupItemDependency>();
+    public ICollection<FollowupItemDependency> DependentBy { get; set; } = new List<FollowupItemDependency>();
 }

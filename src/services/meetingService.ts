@@ -72,9 +72,23 @@ export async function deleteNote(meetingId: number, noteId: number): Promise<voi
   await apiClient.delete(`/Meetings/${meetingId}/notes/${noteId}`);
 }
 
+export async function reorderItems(meetingId: number, items: { type: "NOTE" | "FOLLOWUP"; id: number; order: number }[]): Promise<void> {
+  await apiClient.put(`/Meetings/${meetingId}/reorder-items`, items);
+}
+
 // ──────────── Meeting Links ────────────
 
 export async function addMeetingLink(meetingId: number, dto: CreateMeetingLinkRequest): Promise<MeetingLinkDto> {
   const { data } = await apiClient.post<MeetingLinkDto>(`/Meetings/${meetingId}/links`, dto);
   return data;
+}
+
+export async function deleteMeetingLink(meetingId: number, linkId: number): Promise<void> {
+  await apiClient.delete(`/meetings/${meetingId}/links/${linkId}`);
+}
+
+export async function toggleAttendance(meetingId: number, participantId: number, isAttended: boolean): Promise<void> {
+  await apiClient.patch(`/meetings/${meetingId}/participants/${participantId}/attendance`, isAttended, {
+    headers: { "Content-Type": "application/json" }
+  });
 }

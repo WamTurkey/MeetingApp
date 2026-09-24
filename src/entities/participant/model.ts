@@ -7,11 +7,13 @@ export interface Participant extends BaseEntity {
   personId: number;
   personName: string;
   email?: string;
+  phone?: string;
   avatarUrl?: string | null;
   title?: string;
   companyName?: string;
   role: ParticipantRole;
   roleDisplay?: string;
+  isAttended?: boolean;
 }
 
 export interface ParticipantCreatePayload {

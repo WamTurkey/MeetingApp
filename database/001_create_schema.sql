@@ -363,9 +363,9 @@ CREATE TABLE dbo.FollowupItems (
     CompletedOn           DATE           NULL,
     WaitingReason         NVARCHAR(500)  NULL,
     DevelopmentNote       NVARCHAR(MAX)  NULL,
-    BlockerItemId         INT            NULL,
     SourceMeetingId       INT            NULL,
     SourceNoteId          INT            NULL,
+    DisplayOrder          INT            NOT NULL DEFAULT 0,
     Version               INT            NOT NULL DEFAULT 0,
     CreatedBy             INT            NOT NULL,
     UpdatedBy             INT            NULL,
@@ -378,13 +378,11 @@ CREATE TABLE dbo.FollowupItems (
     CONSTRAINT FK_FI_ResponsiblePerson FOREIGN KEY (ResponsiblePersonId) REFERENCES dbo.Persons(Id),
     CONSTRAINT FK_FI_ResponsibleCompany FOREIGN KEY (ResponsibleCompanyId) REFERENCES dbo.Companies(Id),
     CONSTRAINT FK_FI_ActionStatus FOREIGN KEY (ActionStatus) REFERENCES dbo.LK_ActionStatus(StatusCode),
-    CONSTRAINT FK_FI_Blocker FOREIGN KEY (BlockerItemId) REFERENCES dbo.FollowupItems(Id),
     CONSTRAINT FK_FI_SourceMeeting FOREIGN KEY (SourceMeetingId) REFERENCES dbo.Meetings(Id),
     CONSTRAINT FK_FI_SourceNote FOREIGN KEY (SourceNoteId) REFERENCES dbo.Notes(Id),
     CONSTRAINT FK_FI_CreatedBy FOREIGN KEY (CreatedBy) REFERENCES dbo.Users(Id),
     CONSTRAINT FK_FI_UpdatedBy FOREIGN KEY (UpdatedBy) REFERENCES dbo.Users(Id),
-    CONSTRAINT FK_FI_DeletedBy FOREIGN KEY (DeletedBy) REFERENCES dbo.Users(Id),
-    CONSTRAINT CK_FI_NoCyclicBlocker CHECK (BlockerItemId <> Id)
+    CONSTRAINT FK_FI_DeletedBy FOREIGN KEY (DeletedBy) REFERENCES dbo.Users(Id)
 );
 CREATE INDEX IX_FI_DueDate ON dbo.FollowupItems(DueDate) WHERE DueDate IS NOT NULL AND IsDeleted = 0;
 CREATE INDEX IX_FI_Status ON dbo.FollowupItems(ActionStatus) WHERE IsDeleted = 0;
@@ -392,7 +390,20 @@ CREATE INDEX IX_FI_SourceMeeting ON dbo.FollowupItems(SourceMeetingId) WHERE Sou
 CREATE INDEX IX_FI_SourceNote ON dbo.FollowupItems(SourceNoteId) WHERE SourceNoteId IS NOT NULL;
 GO
 
--- 4.6 FOLLOWUP CHANGE LOGS (Immutable — NO soft delete)
+-- 4.6 FOLLOWUP ITEM DEPENDENCIES (M:N)
+CREATE TABLE dbo.FollowupItemDependencies (
+    Id                    INT IDENTITY(1,1) PRIMARY KEY,
+    ItemId                INT NOT NULL,
+    DependsOnItemId       INT NOT NULL,
+    CreatedAt             DATETIME2(3) NOT NULL DEFAULT SYSUTCDATETIME(),
+    CONSTRAINT FK_FID_Item FOREIGN KEY (ItemId) REFERENCES dbo.FollowupItems(Id),
+    CONSTRAINT FK_FID_DependsOnItem FOREIGN KEY (DependsOnItemId) REFERENCES dbo.FollowupItems(Id),
+    CONSTRAINT CK_FID_NoSelfDependency CHECK (ItemId <> DependsOnItemId),
+    CONSTRAINT UQ_FID_Dependency UNIQUE (ItemId, DependsOnItemId)
+);
+GO
+
+-- 4.7 FOLLOWUP CHANGE LOGS (Immutable — NO soft delete)
 CREATE TABLE dbo.FollowupChangeLogs (
     Id              INT            IDENTITY(1,1) NOT NULL,
     FollowupId      INT            NOT NULL,
@@ -451,11 +462,11 @@ SELECT
     fi.ResponsibleCompanyId,
     c.Name AS ResponsibleCompanyName,
     fi.DueDate, fi.ActionStatus, fi.CompletedOn,
-    fi.WaitingReason, fi.DevelopmentNote, fi.BlockerItemId,
+    fi.WaitingReason, fi.DevelopmentNote,
     fi.SourceMeetingId,
     m.Title AS SourceMeetingTitle,
     m.MeetingDate AS SourceMeetingDate,
-    fi.SourceNoteId, fi.Version,
+    fi.SourceNoteId, fi.DisplayOrder, fi.Version,
     fi.CreatedBy, fi.CreatedAt, fi.UpdatedAt,
     CASE
         WHEN fi.ActionStatus IN ('DONE', 'CANCELLED')                THEN 'CLOSED'

@@ -3,10 +3,11 @@ import { useState, useEffect, useCallback } from "react";
 import { useParams, useNavigate, Link } from "react-router-dom";
 import { ArrowLeft, Pencil, FileText, Loader2 } from "lucide-react";
 import { Button } from "@/shared/ui/Button";
+import { toast } from "sonner";
 import { Card, CardContent } from "@/shared/ui/Card";
 import { Modal } from "@/shared/ui/Modal";
 import { cn } from "@/shared/lib/cn";
-import { MeetingStatusBadge } from "@/entities/meeting/ui/MeetingStatusBadge";
+import { Select } from "@/shared/ui/Select";
 import { MeetingDateLabel } from "@/entities/meeting/ui/MeetingDateLabel";
 import type { Meeting } from "@/entities/meeting/model";
 import type { Note, NoteCreatePayload } from "@/entities/note/model";
@@ -27,6 +28,8 @@ import {
   deleteNote as apiDeleteNote,
   addParticipant,
   removeParticipant,
+  toggleAttendance,
+  reorderItems,
 } from "@/services/meetingService";
 import type { MeetingDetail, NoteDto, ParticipantDto } from "@/types/api";
 
@@ -54,6 +57,7 @@ function toMeeting(d: MeetingDetail): Meeting {
     categoryId: d.categoryId, categoryName: d.categoryName,
     startedAt: d.startedAt, endedAt: d.endedAt,
     nextMeetingAt: d.nextMeetingAt, nextMeetingNote: d.nextMeetingNote ?? undefined,
+    linkedMeetings: (d as any).linkedMeetings ?? [],
     createdAt: d.createdAt, updatedAt: d.updatedAt,
   };
 }
@@ -74,8 +78,12 @@ function toNote(n: NoteDto): Note {
 function toParticipant(p: ParticipantDto): Participant {
   return {
     id: p.id, personId: p.personId, personName: p.personName,
-    companyName: p.companyName ?? undefined, role: p.role as Participant["role"],
-    roleDisplay: p.roleDisplay, createdAt: "", updatedAt: "",
+    companyName: p.companyName ?? undefined,
+    email: p.email ?? undefined,
+    phone: p.phone ?? undefined,
+    title: p.title ?? undefined,
+    role: p.role as Participant["role"],
+    roleDisplay: p.roleDisplay, isAttended: p.isAttended, createdAt: "", updatedAt: "",
   };
 }
 
@@ -133,8 +141,9 @@ export function MeetingDetailPage() {
     try {
       await updateMeeting(meetingId, data);
       setShowEdit(false);
+      toast.success("Toplantı güncellendi");
       await load();
-    } catch (err) { console.error("[MeetingDetail] Edit error:", err); }
+    } catch (err) { console.error("[MeetingDetail] Edit error:", err); toast.error("Toplantı güncellenemedi"); }
   }
 
   async function handleStart() {
@@ -151,23 +160,38 @@ export function MeetingDetailPage() {
     } catch (err) { console.error("[MeetingDetail] End error:", err); }
   }
 
+  async function handleStatusChange(newStatus: MeetingStatus) {
+    if (meeting?.status === newStatus) return;
+    try {
+      await updateMeeting(meetingId, { ...meeting!, status: newStatus } as any);
+      toast.success("Toplantı durumu güncellendi");
+      await load();
+    } catch (err) { console.error("[MeetingDetail] Status update error:", err); toast.error("Durum güncellenemedi"); }
+  }
+
   async function handleDelete() {
     try {
       await deleteMeeting(meetingId);
+      toast.success("Toplantı silindi");
       navigate("/meetings");
-    } catch (err) { console.error("[MeetingDetail] Delete error:", err); }
+    } catch (err) { console.error("[MeetingDetail] Delete error:", err); toast.error("Toplantı silinemedi"); }
   }
 
-  function handleReorderNotes(noteId: number, direction: "up" | "down") {
-    setNotes((prev) => {
-      const idx = prev.findIndex((n) => n.id === noteId);
-      if (idx < 0) return prev;
-      const swapIdx = direction === "up" ? idx - 1 : idx + 1;
-      if (swapIdx < 0 || swapIdx >= prev.length) return prev;
-      const next = [...prev];
-      const temp = next[idx]; next[idx] = next[swapIdx]!; next[swapIdx] = temp!;
-      return next;
-    });
+  async function handleReorderNotes(reorderedNotes: Note[]) {
+    setNotes(reorderedNotes);
+    const payload = reorderedNotes.map((n, index) => ({
+      type: "NOTE" as const,
+      id: n.id,
+      order: index + 1
+    }));
+    try {
+      await reorderItems(meetingId, payload);
+      toast.success("Sıralama başarıyla güncellendi");
+    } catch (err) {
+      console.error("[MeetingDetail] Reorder error:", err);
+      toast.error("Sıralama güncellenemedi");
+      await load();
+    }
   }
 
   async function handleAddNote(data: NoteCreatePayload) {
@@ -180,22 +204,25 @@ export function MeetingDetailPage() {
         dueDate: data.dueDate ?? undefined,
         actionStatus: data.actionStatus,
       });
+      toast.success("Not başarıyla eklendi");
       await load();
-    } catch (err) { console.error("[MeetingDetail] AddNote error:", err); }
+    } catch (err) { console.error("[MeetingDetail] AddNote error:", err); toast.error("Not eklenemedi"); }
   }
 
   async function handleDeleteNote(noteId: number) {
     try {
       await apiDeleteNote(meetingId, noteId);
       setNotes((prev) => prev.filter((n) => n.id !== noteId));
-    } catch (err) { console.error("[MeetingDetail] DeleteNote error:", err); }
+      toast.success("Not silindi");
+    } catch (err) { console.error("[MeetingDetail] DeleteNote error:", err); toast.error("Not silinemedi"); }
   }
 
-  async function handleAddParticipant(data: ParticipantCreatePayload) {
+  async function handleAddParticipants(dataArray: ParticipantCreatePayload[]) {
     try {
-      await addParticipant(meetingId, { personId: data.personId, role: data.role });
+      await Promise.all(dataArray.map(data => addParticipant(meetingId, { personId: data.personId, role: data.role })));
+      toast.success(`${dataArray.length} katılımcı eklendi`);
       await load();
-    } catch (err) { console.error("[MeetingDetail] AddParticipant error:", err); }
+    } catch (err) { console.error("[MeetingDetail] AddParticipant error:", err); toast.error("Katılımcılar eklenemedi"); }
   }
 
   async function handleRemoveParticipant(participantId: number) {
@@ -205,13 +232,21 @@ export function MeetingDetailPage() {
     } catch (err) { console.error("[MeetingDetail] RemoveParticipant error:", err); }
   }
 
+  async function handleToggleAttendance(participantId: number, isAttended: boolean) {
+    try {
+      await toggleAttendance(meetingId, participantId, isAttended);
+      setParticipants((prev) => prev.map((p) => p.id === participantId ? { ...p, isAttended } : p));
+      toast.success("Katılım durumu güncellendi");
+    } catch (err) { console.error("[MeetingDetail] ToggleAttendance error:", err); toast.error("Durum güncellenemedi"); }
+  }
+
   return (
     <div className="space-y-6">
       {/* Back + actions */}
       <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
         <Button variant="ghost" size="sm" icon={<ArrowLeft className="h-4 w-4" />} onClick={() => navigate("/meetings")}>Toplantılar</Button>
         <div className="flex items-center gap-2 flex-wrap">
-          {editable && (<Button variant="outline" size="sm" icon={<Pencil className="h-4 w-4" />} onClick={() => setShowEdit(true)}>Düzenle</Button>)}
+          {editable && (<Button variant="outline" size="icon" icon={<Pencil className="h-4 w-4" />} onClick={() => setShowEdit(true)} title="Düzenle" />)}
           <Link to={`/meetings/${meetingId}/minutes`}><Button variant="outline" size="sm" icon={<FileText className="h-4 w-4" />}>Tutanak Önizle</Button></Link>
           <StartMeetingButton meeting={meeting} onStart={handleStart} />
           <EndMeetingButton meeting={meeting} onEnd={handleEnd} />
@@ -224,7 +259,18 @@ export function MeetingDetailPage() {
         <CardContent>
           <div className="flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between">
             <div className="flex-1">
-              <div className="mb-2"><MeetingStatusBadge status={meeting.status} /></div>
+              <div className="mb-3 w-48">
+                <Select
+                  value={meeting.status}
+                  onChange={(e) => handleStatusChange(e.target.value as MeetingStatus)}
+                  options={[
+                    { value: "DRAFT", label: "Taslak" },
+                    { value: "ACTIVE", label: "Aktif (Sürüyor)" },
+                    { value: "COMPLETED", label: "Tamamlandı" },
+                    { value: "EXPORTED", label: "İptal Edildi / Dışa Aktarıldı" }
+                  ]}
+                />
+              </div>
               <h1 className="text-xl font-bold text-surface-900 dark:text-surface-50">{meeting.title}</h1>
               {meeting.description && (<p className="mt-2 text-sm text-surface-600 leading-relaxed dark:text-surface-400">{meeting.description}</p>)}
               <div className="mt-3 flex flex-wrap items-center gap-3">
@@ -253,12 +299,12 @@ export function MeetingDetailPage() {
 
       {/* Tab content */}
       {activeTab === "notes" && (
-        <NotesPanel notes={notes} meetingId={meetingId} editable={editable} onAddNote={handleAddNote} onDeleteNote={handleDeleteNote} onReorderNotes={handleReorderNotes as any} />
+        <NotesPanel notes={notes} meetingId={meetingId} editable={editable} onAddNote={handleAddNote} onDeleteNote={handleDeleteNote} onReorderNotes={handleReorderNotes} />
       )}
       {activeTab === "participants" && (
-        <ParticipantsPanel participants={participants} meetingId={meetingId} editable={editable} onAdd={handleAddParticipant} onRemove={handleRemoveParticipant} />
+        <ParticipantsPanel participants={participants} meetingId={meetingId} editable={editable} onAddMultiple={handleAddParticipants} onRemove={handleRemoveParticipant} onToggleAttendance={handleToggleAttendance} />
       )}
-      {activeTab === "links" && <MeetingLinksPanel meeting={meeting} />}
+      {activeTab === "links" && <MeetingLinksPanel meeting={meeting} onRefresh={load} />}
       {activeTab === "info" && (
         <Card><CardContent className="space-y-4">
           {[
@@ -284,7 +330,7 @@ export function MeetingDetailPage() {
           <Link to={`/meetings/${meetingId}/minutes`}><Button variant="primary" className="mt-4">Önizlemeye Git</Button></Link>
         </CardContent></Card>
       )}
-      {activeTab === "prep" && <MeetingPrepPanel meetingId={meetingId} previousNotes={notes.filter((n) => n.noteType === "TASK" || n.noteType === "DECISION")} />}
+      {activeTab === "prep" && <MeetingPrepPanel meetingId={meetingId} onRefresh={load} />}
 
       {/* Edit modal */}
       <Modal isOpen={showEdit} onClose={() => setShowEdit(false)} title="Toplantıyı Düzenle" size="lg">

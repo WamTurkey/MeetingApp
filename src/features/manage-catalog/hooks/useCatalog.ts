@@ -104,26 +104,29 @@ export function useCatalog(kind: CatalogKind) {
   const create = useCallback(
     async (data: Record<string, string | boolean>) => {
       try {
+        let created;
         switch (kind) {
           case "companies":
-            await createCompany({ name: data.name as string, shortName: data.shortName as string });
+            created = await createCompany({ name: data.name as string, shortName: data.shortName as string });
             break;
           case "projects":
-            await createProject({ name: data.name as string, code: data.code as string });
+            created = await createProject({ name: data.name as string, code: data.code as string });
             break;
           case "locations":
-            await createLocation({ name: data.name as string });
+            created = await createLocation({ name: data.name as string });
             break;
           case "categories":
-            await createCategory({ name: data.name as string });
+            created = await createCategory({ name: data.name as string });
             break;
           case "titles":
-            await createTitle({ name: data.name as string });
+            created = await createTitle({ name: data.name as string });
             break;
         }
         await load(); // yeniden yükle
+        return created;
       } catch (err) {
         console.error(`[useCatalog:${kind}] Create Error:`, err);
+        throw err;
       }
     },
     [kind, load],
@@ -155,5 +158,6 @@ export function useCatalog(kind: CatalogKind) {
     isLoading,
     create,
     remove,
+    refetch: load,
   };
 }

@@ -10,6 +10,7 @@ export interface Meeting extends BaseEntity {
   status: MeetingStatus;
   statusDisplay?: string;
   version: number;
+  linkedMeetings?: any[];
   projectId?: number | null;
   projectName?: string | null;
   companyId?: number | null;

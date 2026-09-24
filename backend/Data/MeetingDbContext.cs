@@ -43,6 +43,7 @@ public class MeetingDbContext : DbContext
     public DbSet<MeetingParticipant> MeetingParticipants => Set<MeetingParticipant>();
     public DbSet<Note> Notes => Set<Note>();
     public DbSet<FollowupItem> FollowupItems => Set<FollowupItem>();
+    public DbSet<FollowupItemDependency> FollowupItemDependencies => Set<FollowupItemDependency>();
     public DbSet<FollowupChangeLog> FollowupChangeLogs => Set<FollowupChangeLog>();
     public DbSet<Attachment> Attachments => Set<Attachment>();
 
@@ -301,13 +302,14 @@ public class MeetingDbContext : DbContext
             e.Property(x => x.ActionStatus).HasMaxLength(20).HasDefaultValue("OPEN");
             e.Property(x => x.WaitingReason).HasMaxLength(500);
             e.Property(x => x.Version).HasDefaultValue(0);
+            e.Property(x => x.DisplayOrder).HasDefaultValue(0);
             ConfigureAuditFields(e);
             e.HasQueryFilter(x => !x.IsDeleted);
 
             e.HasOne(x => x.ResponsiblePerson).WithMany(p => p.ResponsibleFollowups).HasForeignKey(x => x.ResponsiblePersonId).OnDelete(DeleteBehavior.Restrict);
             e.HasOne(x => x.ResponsibleCompany).WithMany(c => c.FollowupItems).HasForeignKey(x => x.ResponsibleCompanyId).OnDelete(DeleteBehavior.Restrict);
             e.HasOne(x => x.ActionStatusNavigation).WithMany(a => a.FollowupItems).HasForeignKey(x => x.ActionStatus).OnDelete(DeleteBehavior.Restrict);
-            e.HasOne(x => x.BlockerItem).WithMany(f => f.BlockedItems).HasForeignKey(x => x.BlockerItemId).OnDelete(DeleteBehavior.Restrict);
+            e.HasOne(x => x.RolledOverFrom).WithMany(f => f.RolledOverToItems).HasForeignKey(x => x.RolledOverFromId).OnDelete(DeleteBehavior.Restrict);
             e.HasOne(x => x.SourceMeeting).WithMany(m => m.SourceFollowups).HasForeignKey(x => x.SourceMeetingId).OnDelete(DeleteBehavior.Restrict);
             e.HasOne(x => x.SourceNote).WithMany(n => n.SourceFollowups).HasForeignKey(x => x.SourceNoteId).OnDelete(DeleteBehavior.Restrict);
             e.HasOne(x => x.CreatedByUser).WithMany().HasForeignKey(x => x.CreatedBy).OnDelete(DeleteBehavior.Restrict);
@@ -315,7 +317,24 @@ public class MeetingDbContext : DbContext
             e.HasOne(x => x.DeletedByUser).WithMany().HasForeignKey(x => x.DeletedBy).OnDelete(DeleteBehavior.Restrict);
         });
 
-        // ── 4.6 FollowupChangeLogs (Immutable — NO soft delete) ──
+        // ── 4.6 FollowupItemDependencies ──
+        modelBuilder.Entity<FollowupItemDependency>(e =>
+        {
+            e.ToTable("FollowupItemDependencies");
+            e.HasKey(x => x.Id);
+            
+            e.HasOne(x => x.Item)
+             .WithMany(f => f.DependentOn)
+             .HasForeignKey(x => x.ItemId)
+             .OnDelete(DeleteBehavior.Restrict);
+             
+            e.HasOne(x => x.DependsOnItem)
+             .WithMany(f => f.DependentBy)
+             .HasForeignKey(x => x.DependsOnItemId)
+             .OnDelete(DeleteBehavior.Restrict);
+        });
+
+        // ── 4.7 FollowupChangeLogs (Immutable — NO soft delete) ──
         modelBuilder.Entity<FollowupChangeLog>(e =>
         {
             e.ToTable("FollowupChangeLogs");

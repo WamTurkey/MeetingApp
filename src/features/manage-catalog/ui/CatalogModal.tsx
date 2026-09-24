@@ -9,6 +9,7 @@ import { useState, type FormEvent } from "react";
 import { Plus, Trash2 } from "lucide-react";
 import { Modal } from "@/shared/ui/Modal";
 import { Button } from "@/shared/ui/Button";
+import { toast } from "sonner";
 import { Input } from "@/shared/ui/Input";
 import { Checkbox } from "@/shared/ui/Checkbox";
 import { useCatalog, type CatalogKind } from "../hooks/useCatalog";
@@ -19,6 +20,8 @@ export interface CatalogModalProps {
   kind: CatalogKind;
   /** Called with the new item's ID after creation */
   onCreated?: (id: number) => void;
+  /** Called after any deletion */
+  onDeleted?: () => void;
 }
 
 export function CatalogModal({
@@ -26,6 +29,7 @@ export function CatalogModal({
   onClose,
   kind,
   onCreated,
+  onDeleted,
 }: CatalogModalProps) {
   const { items, fields, label, create, remove } = useCatalog(kind);
   const [formData, setFormData] = useState<Record<string, string>>({});
@@ -38,17 +42,22 @@ export function CatalogModal({
     setError("");
   }
 
-  function handleSubmit(e: FormEvent) {
+  async function handleSubmit(e: FormEvent) {
     e.preventDefault();
     const nameField = fields.find((f) => f.key === "name");
     if (!formData.name?.trim()) {
       setError(`${nameField?.label?.replace(" *", "") || "Ad"} alanı zorunludur`);
       return;
     }
-    const newItem = create({ ...formData, active });
-    if (newItem && typeof newItem === "object" && "id" in newItem) onCreated?.((newItem as any).id);
-    resetForm();
-    onClose();
+    try {
+      const newItem = await create({ ...formData, active });
+      toast.success("Kayıt başarıyla oluşturuldu");
+      if (newItem && typeof newItem === "object" && "id" in newItem) onCreated?.((newItem as any).id);
+      resetForm();
+    } catch (err: any) {
+      toast.error("Kaydedilirken bir hata oluştu");
+      setError(err.message || "Kaydedilirken bir hata oluştu.");
+    }
   }
 
   return (
@@ -165,7 +174,10 @@ export function CatalogModal({
                       <td className="px-3 py-2 text-right">
                         <button
                           type="button"
-                          onClick={() => remove(item.id)}
+                          onClick={async () => {
+                            await remove(item.id);
+                            onDeleted?.();
+                          }}
                           className="rounded-md p-1 text-surface-400 transition-colors hover:bg-danger-50 hover:text-danger-600 dark:hover:bg-danger-900/20"
                           title="Sil"
                         >

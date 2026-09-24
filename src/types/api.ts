@@ -262,8 +262,12 @@ export interface ParticipantDto {
   personId: number;
   personName: string;
   companyName: string | null;
+  email: string | null;
+  phone: string | null;
+  title: string | null;
   role: string;
   roleDisplay: string;
+  isAttended: boolean;
 }
 
 export interface AddParticipantRequest {
@@ -338,7 +342,7 @@ export interface FollowupItemDto {
   completedOn: string | null;
   waitingReason: string | null;
   developmentNote: string | null;
-  blockerItemId: number | null;
+  dependencyItemIds: number[] | null;
   sourceMeetingId: number | null;
   sourceMeetingTitle: string | null;
   sourceNoteId: number | null;
@@ -355,7 +359,7 @@ export interface CreateFollowupRequest {
   dueDate?: string;
   waitingReason?: string;
   developmentNote?: string;
-  blockerItemId?: number;
+  dependencyItemIds?: number[];
   sourceMeetingId?: number;
   sourceNoteId?: number;
 }
@@ -370,7 +374,7 @@ export interface UpdateFollowupRequest {
   completedOn?: string;
   waitingReason?: string;
   developmentNote?: string;
-  blockerItemId?: number;
+  dependencyItemIds?: number[];
 }
 
 // ──────────── Followup Change Log ────────────

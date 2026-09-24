@@ -1,8 +1,10 @@
+using MeetingApp.API.Services;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.EntityFrameworkCore;
 using MeetingApp.API.Data;
 using MeetingApp.API.DTOs;
 using MeetingApp.API.Models.Business;
+using ClosedXML.Excel;
 
 namespace MeetingApp.API.Controllers;
 
@@ -11,7 +13,12 @@ namespace MeetingApp.API.Controllers;
 public class MeetingsController : ControllerBase
 {
     private readonly MeetingDbContext _db;
-    public MeetingsController(MeetingDbContext db) => _db = db;
+    private readonly OutlookCalendarService _outlook;
+    public MeetingsController(MeetingDbContext db, OutlookCalendarService outlook)
+    {
+        _db = db;
+        _outlook = outlook;
+    }
 
     // ──────────── GET /api/meetings ────────────
     [HttpGet]
@@ -110,7 +117,8 @@ public class MeetingsController : ControllerBase
             m.Participants.Select(p => new ParticipantDto(
                 p.Id, p.PersonId, p.Person.FullName,
                 p.Person.Company?.Name,
-                p.Role, p.RoleNavigation.DisplayName)).ToList(),
+                p.Person.Email, p.Person.Phone, p.Person.Title,
+                p.Role, p.RoleNavigation.DisplayName, p.IsAttended)).ToList(),
             m.Notes.OrderBy(n => n.DisplayOrder).Select(n => new NoteDto(
                 n.Id, n.Content, n.NoteType, n.NoteTypeNavigation.DisplayName,
                 n.DisplayOrder,
@@ -178,6 +186,40 @@ public class MeetingsController : ControllerBase
         return Ok(await GetDetailDto(id));
     }
 
+    // ──────────── PUT /api/meetings/{id}/reorder-items ────────────
+                [HttpPut("{id}/reorder-items")]
+    public async Task<IActionResult> ReorderItems(int id, [FromBody] List<ReorderItemDto> items)
+    {
+        try 
+        {
+            var noteUpdates = items.Where(x => x.Type == "NOTE").ToList();
+            var followupUpdates = items.Where(x => x.Type == "FOLLOWUP").ToList();
+
+            var notes = await _db.Notes.Where(n => n.MeetingId == id).ToListAsync();
+            var followups = await _db.FollowupItems.Where(f => f.SourceMeetingId == id).ToListAsync();
+
+            foreach (var update in noteUpdates)
+            {
+                var n = notes.FirstOrDefault(x => x.Id == update.Id);
+                if (n != null) n.DisplayOrder = update.Order;
+            }
+
+            foreach (var update in followupUpdates)
+            {
+                var f = followups.FirstOrDefault(x => x.Id == update.Id);
+                if (f != null) f.DisplayOrder = update.Order;
+            }
+
+            await _db.SaveChangesAsync();
+            return NoContent();
+        }
+        catch (Exception ex)
+        {
+            Console.WriteLine("REORDER EXCEPTION: " + ex.ToString());
+            return StatusCode(500, new { message = "Sıralama güncellenirken bir hata oluştu." });
+        }
+    }
+
     // ──────────── DELETE /api/meetings/{id} (Soft Delete) ────────────
     [HttpDelete("{id}")]
     public async Task<IActionResult> Delete(int id)
@@ -204,6 +246,7 @@ public class MeetingsController : ControllerBase
             MeetingId = id,
             PersonId = dto.PersonId,
             Role = dto.Role,
+            IsAttended = true, // Default as requested
             CreatedBy = 1
         };
         _db.MeetingParticipants.Add(participant);
@@ -215,7 +258,24 @@ public class MeetingsController : ControllerBase
             .FirstAsync(x => x.Id == participant.Id);
 
         return Created("", new ParticipantDto(p.Id, p.PersonId, p.Person.FullName,
-            p.Person.Company?.Name, p.Role, p.RoleNavigation.DisplayName));
+            p.Person.Company?.Name, p.Person.Email, p.Person.Phone, p.Person.Title,
+            p.Role, p.RoleNavigation.DisplayName, p.IsAttended));
+    }
+
+
+    // ──────────── PATCH /api/meetings/{id}/participants/{participantId}/attendance ────────────
+    [HttpPatch("{id}/participants/{participantId}/attendance")]
+    public async Task<IActionResult> ToggleAttendance(int id, int participantId, [FromBody] bool isAttended)
+    {
+        var p = await _db.MeetingParticipants.FirstOrDefaultAsync(x => x.Id == participantId && x.MeetingId == id);
+        if (p == null) return NotFound();
+        
+        p.IsAttended = isAttended;
+        p.UpdatedBy = int.Parse(User.FindFirst(System.Security.Claims.ClaimTypes.NameIdentifier)?.Value ?? "1");
+        p.UpdatedAt = DateTime.UtcNow;
+        
+        await _db.SaveChangesAsync();
+        return NoContent();
     }
 
     // ──────────── DELETE /api/meetings/{id}/participants/{participantId} ────────────
@@ -309,6 +369,13 @@ public class MeetingsController : ControllerBase
     public async Task<ActionResult<MeetingLinkDto>> AddLink(int id, [FromBody] CreateMeetingLinkDto dto)
     {
         if (!await _db.Meetings.AnyAsync(m => m.Id == id)) return NotFound();
+        
+        // Check for duplicate link
+        var existing = await _db.MeetingLinks.FirstOrDefaultAsync(x => 
+            x.ParentMeetingId == id && x.ChildMeetingId == dto.ChildMeetingId);
+        if (existing != null)
+            return Conflict(new { message = "Bu toplantı bağlantısı zaten mevcut." });
+        
         var link = new MeetingLink
         {
             ParentMeetingId = id,
@@ -329,11 +396,289 @@ public class MeetingsController : ControllerBase
             l.RelationType, l.RelationTypeNavigation.DisplayName, "CHILD"));
     }
 
+    // ──────────── DELETE /api/meetings/{id}/links/{linkId} ────────────
+    [HttpDelete("{id}/links/{linkId}")]
+    public async Task<IActionResult> DeleteLink(int id, int linkId)
+    {
+        var link = await _db.MeetingLinks.FindAsync(linkId);
+        if (link == null) 
+            return NotFound();
+
+        // Security check: link should belong to the meeting requested
+        if (link.ParentMeetingId != id && link.ChildMeetingId != id)
+            return Forbid();
+
+        var currentUserId = int.Parse(User.FindFirst(System.Security.Claims.ClaimTypes.NameIdentifier)?.Value ?? "1");
+
+        // Find all FollowupItems in ChildMeeting that were rolled over from ParentMeeting
+        var rolledOverItems = await _db.FollowupItems
+            .Include(f => f.RolledOverFrom)
+            .Where(f => f.SourceMeetingId == link.ChildMeetingId && 
+                        f.RolledOverFromId != null && 
+                        f.RolledOverFrom.SourceMeetingId == link.ParentMeetingId && 
+                        !f.IsDeleted)
+            .ToListAsync();
+
+        if (rolledOverItems.Any())
+        {
+            // Restore the old items' status if they were ROLLED_OVER
+            var oldItemIds = rolledOverItems.Where(f => f.RolledOverFromId.HasValue).Select(f => f.RolledOverFromId.Value).ToList();
+            var oldItems = await _db.FollowupItems.Where(f => oldItemIds.Contains(f.Id)).ToListAsync();
+            foreach(var oldItem in oldItems) {
+                if (oldItem.ActionStatus == "ROLLED_OVER") 
+                {
+                    oldItem.ActionStatus = "OPEN";
+                    oldItem.UpdatedBy = currentUserId;
+                    oldItem.UpdatedAt = DateTime.UtcNow;
+                }
+            }
+
+            // Soft delete the new FollowupItems
+            var noteIds = new List<int>();
+            foreach (var item in rolledOverItems)
+            {
+                item.IsDeleted = true;
+                item.DeletedAt = DateTime.UtcNow;
+                item.DeletedBy = currentUserId;
+                if (item.SourceNoteId.HasValue) noteIds.Add(item.SourceNoteId.Value);
+            }
+
+            // Soft delete the associated Notes
+            if (noteIds.Any())
+            {
+                var notes = await _db.Notes.Where(n => noteIds.Contains(n.Id)).ToListAsync();
+                foreach (var note in notes)
+                {
+                    note.IsDeleted = true;
+                    note.DeletedAt = DateTime.UtcNow;
+                    note.DeletedBy = currentUserId;
+                }
+            }
+        }
+
+        _db.MeetingLinks.Remove(link);
+        await _db.SaveChangesAsync();
+
+        return NoContent();
+    }
+
+
+    // ──────────── GET /api/meetings/{id}/preparation ────────────
+    [HttpGet("{id}/preparation")]
+    public async Task<ActionResult<IEnumerable<FollowupItemDto>>> GetPreparationItems(int id)
+    {
+        // Find previous meeting(s) -> meaning the current meeting is the child, so we look at MeetingLinks where ChildMeetingId = id
+        var parentMeetingIds = await _db.MeetingLinks
+            .Where(x => x.ChildMeetingId == id)
+            .Select(x => x.ParentMeetingId)
+            .ToListAsync();
+
+        if (!parentMeetingIds.Any())
+            return Ok(new List<FollowupItemDto>());
+
+        var openItems = await _db.FollowupItems
+            .Include(x => x.ResponsiblePerson)
+            .Include(x => x.ResponsibleCompany)
+            .Include(x => x.ActionStatusNavigation)
+            .Include(x => x.DependentOn)
+            .Where(x => parentMeetingIds.Contains(x.SourceMeetingId.Value))
+            .Where(x => x.ActionStatus != "COMPLETED" && x.ActionStatus != "CANCELLED" && x.ActionStatus != "ROLLED_OVER" && x.ActionStatus != "DONE")
+            .ToListAsync();
+
+        var dtos = openItems.Select(x => new FollowupItemDto(
+            x.Id, x.Text, x.TopicId, x.ResponsiblePersonId, x.ResponsiblePerson?.FullName,
+            x.ResponsibleCompanyId, x.ResponsibleCompany?.Name,
+            x.DueDate?.ToString("yyyy-MM-dd"), x.ActionStatus, x.ActionStatusNavigation.DisplayName,
+            x.CompletedOn?.ToString("yyyy-MM-dd"), x.WaitingReason, x.DevelopmentNote,
+            x.DependentOn.Select(d => d.DependsOnItemId).ToList(), x.SourceMeetingId, null,
+            x.SourceNoteId, x.Version,
+            x.CreatedAt.ToString("yyyy-MM-ddTHH:mm:ss"), x.UpdatedAt.ToString("yyyy-MM-ddTHH:mm:ss")
+        ));
+
+        return Ok(dtos);
+    }
+
+    // ──────────── POST /api/meetings/{id}/rollover-items ────────────
+    [HttpPost("{id}/rollover-items")]
+    public async Task<ActionResult> RolloverItems(int id, [FromBody] List<int> itemIds)
+    {
+        var currentUserId = int.Parse(User.FindFirst(System.Security.Claims.ClaimTypes.NameIdentifier)?.Value ?? "0");
+
+        var oldItems = await _db.FollowupItems
+            .Where(x => itemIds.Contains(x.Id))
+            .ToListAsync();
+
+        foreach (var oldItem in oldItems)
+        {
+            oldItem.ActionStatus = "ROLLED_OVER";
+            oldItem.UpdatedBy = currentUserId;
+            oldItem.UpdatedAt = DateTime.UtcNow;
+
+            var newNote = new Note
+            {
+                MeetingId = id,
+                Content = oldItem.Text,
+                NoteType = "TASK", // Aktarılan maddeler genelde görev/karardır
+                ResponsiblePersonId = oldItem.ResponsiblePersonId,
+                DueDate = oldItem.DueDate,
+                ActionStatus = "OPEN",
+                CreatedBy = currentUserId,
+                CreatedAt = DateTime.UtcNow
+            };
+            _db.Notes.Add(newNote);
+            await _db.SaveChangesAsync(); // SourceNoteId için ID gerekiyor
+
+            var newItem = new FollowupItem
+            {
+                Text = oldItem.Text,
+                TopicId = oldItem.TopicId,
+                ResponsiblePersonId = oldItem.ResponsiblePersonId,
+                ResponsibleCompanyId = oldItem.ResponsibleCompanyId,
+                DueDate = oldItem.DueDate,
+                ActionStatus = "OPEN",
+                WaitingReason = oldItem.WaitingReason,
+                SourceMeetingId = id,
+                SourceNoteId = newNote.Id,
+                RolledOverFromId = oldItem.Id,
+                CreatedBy = currentUserId,
+                CreatedAt = DateTime.UtcNow,
+                Version = 1
+            };
+
+            _db.FollowupItems.Add(newItem);
+        }
+
+        await _db.SaveChangesAsync();
+        return Ok();
+    }
+
     // ── Helper ──
     private async Task<MeetingDetailDto?> GetDetailDto(int id)
     {
         var result = await GetById(id);
         return (result.Result as OkObjectResult)?.Value as MeetingDetailDto
             ?? (result.Value);
+    }
+
+    // ──────────── GET /api/meetings/{id}/export/excel ────────────
+    [HttpGet("{id}/export/excel")]
+    public async Task<IActionResult> ExportToExcel(int id)
+    {
+        var m = await _db.Meetings
+            .Include(x => x.Project)
+            .Include(x => x.Category)
+            .Include(x => x.Location)
+            .Include(x => x.Participants).ThenInclude(p => p.Person).ThenInclude(p => p.Company)
+            .Include(x => x.Participants).ThenInclude(p => p.RoleNavigation)
+            .Include(x => x.Notes).ThenInclude(n => n.NoteTypeNavigation)
+            .Include(x => x.Notes).ThenInclude(n => n.ResponsiblePerson)
+            .FirstOrDefaultAsync(x => x.Id == id);
+
+        if (m == null) return NotFound();
+
+        using var workbook = new XLWorkbook();
+        var ws = workbook.Worksheets.Add("Toplantı Tutanağı");
+
+        // 1. Header Section
+        ws.Cell("A1").Value = "TOPLANTI TUTANAĞI";
+        ws.Range("A1:E1").Merge().Style
+            .Font.SetBold().Font.SetFontSize(16)
+            .Alignment.SetHorizontal(XLAlignmentHorizontalValues.Center)
+            .Fill.SetBackgroundColor(XLColor.LightGray);
+
+        ws.Cell("A2").Value = "Toplantı Konusu:";
+        ws.Cell("B2").Value = m.Title;
+        ws.Range("B2:E2").Merge();
+        
+        ws.Cell("A3").Value = "Tarih / Saat:";
+        ws.Cell("B3").Value = m.MeetingDate.ToString("dd.MM.yyyy") + (m.PlannedStart.HasValue ? $" / {m.PlannedStart.Value.ToString("HH:mm")}" : "");
+        ws.Range("B3:E3").Merge();
+
+        ws.Cell("A4").Value = "Yer:";
+        ws.Cell("B4").Value = m.Location?.Name ?? "-";
+        ws.Range("B4:E4").Merge();
+
+        ws.Cell("A5").Value = "Proje / Kategori:";
+        ws.Cell("B5").Value = $"{m.Project?.Name ?? "-"} / {m.Category?.Name ?? "-"}";
+        ws.Range("B5:E5").Merge();
+
+        ws.Range("A2:E5").Style.Border.OutsideBorder = XLBorderStyleValues.Thin;
+        ws.Range("A2:A5").Style.Font.SetBold();
+
+        int row = 7;
+
+        // 2. Participants Section
+        ws.Cell(row, 1).Value = "KATILIMCILAR";
+        ws.Range(row, 1, row, 5).Merge().Style
+            .Font.SetBold().Fill.SetBackgroundColor(XLColor.LightSteelBlue);
+        row++;
+
+        ws.Cell(row, 1).Value = "Ad Soyad";
+        ws.Cell(row, 2).Value = "Firma";
+        ws.Cell(row, 3).Value = "Rol";
+        ws.Range(row, 3, row, 5).Merge();
+        ws.Range(row, 1, row, 5).Style.Font.SetBold().Border.SetOutsideBorder(XLBorderStyleValues.Thin).Border.SetInsideBorder(XLBorderStyleValues.Thin);
+        row++;
+
+        foreach (var p in m.Participants)
+        {
+            ws.Cell(row, 1).Value = p.Person.FullName;
+            ws.Cell(row, 2).Value = p.Person.Company?.Name ?? "-";
+            ws.Cell(row, 3).Value = p.RoleNavigation.DisplayName;
+            ws.Range(row, 3, row, 5).Merge();
+            ws.Range(row, 1, row, 5).Style.Border.SetOutsideBorder(XLBorderStyleValues.Thin).Border.SetInsideBorder(XLBorderStyleValues.Thin);
+            row++;
+        }
+
+        row++;
+
+        // 3. Meeting Items (Notes, Decisions, Tasks)
+        ws.Cell(row, 1).Value = "GÜNDEM VE KARARLAR";
+        ws.Range(row, 1, row, 5).Merge().Style
+            .Font.SetBold().Fill.SetBackgroundColor(XLColor.LightSteelBlue);
+        row++;
+
+        ws.Cell(row, 1).Value = "Sırano";
+        ws.Cell(row, 2).Value = "Tip";
+        ws.Cell(row, 3).Value = "İçerik";
+        ws.Cell(row, 4).Value = "Sorumlu";
+        ws.Cell(row, 5).Value = "Termin";
+        ws.Range(row, 1, row, 5).Style.Font.SetBold().Border.SetOutsideBorder(XLBorderStyleValues.Thin).Border.SetInsideBorder(XLBorderStyleValues.Thin);
+        row++;
+
+        var sortedNotes = m.Notes.OrderBy(n => n.DisplayOrder).ToList();
+        int seq = 1;
+        foreach (var note in sortedNotes)
+        {
+            ws.Cell(row, 1).Value = seq++;
+            ws.Cell(row, 2).Value = note.NoteTypeNavigation.DisplayName;
+            ws.Cell(row, 3).Value = note.Content;
+            ws.Cell(row, 4).Value = note.ResponsiblePerson?.FullName ?? "-";
+            ws.Cell(row, 5).Value = note.DueDate?.ToString("dd.MM.yyyy") ?? "-";
+            
+            // Format Content cell to wrap text
+            ws.Cell(row, 3).Style.Alignment.SetWrapText(true);
+            
+            ws.Range(row, 1, row, 5).Style.Border.SetOutsideBorder(XLBorderStyleValues.Thin).Border.SetInsideBorder(XLBorderStyleValues.Thin);
+            ws.Range(row, 1, row, 5).Style.Alignment.SetVertical(XLAlignmentVerticalValues.Top);
+            
+            row++;
+        }
+
+        // 4. Columns & Styling
+        ws.Column(1).Width = 8;   // Sırano
+        ws.Column(2).Width = 15;  // Tip / Firma
+        ws.Column(3).Width = 50;  // İçerik / Rol
+        ws.Column(4).Width = 20;  // Sorumlu
+        ws.Column(5).Width = 15;  // Termin
+
+        ws.Style.Font.FontName = "Calibri";
+        ws.Style.Font.FontSize = 11;
+
+        using var stream = new MemoryStream();
+        workbook.SaveAs(stream);
+        var content = stream.ToArray();
+
+        return File(content, "application/vnd.openxmlformats-officedocument.spreadsheetxml.sheet", $"Tutanak_{m.Id}_{DateTime.Now:yyyyMMddHHmm}.xlsx");
     }
 }

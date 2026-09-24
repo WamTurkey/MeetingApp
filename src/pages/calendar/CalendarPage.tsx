@@ -70,6 +70,7 @@ export function CalendarPage() {
       return {
         id: `meeting-${m.id}`,
         title: m.title,
+        order: 1,
         start: m.meetingDate,
         allDay: !m.plannedStart,
         ...(m.plannedStart ? { start: `${m.meetingDate}T${m.plannedStart}` } : {}),
@@ -81,10 +82,11 @@ export function CalendarPage() {
     });
 
     const followupEvents = followupItems
-      .filter((f) => f.dueDate && f.actionStatus !== "DONE" && f.actionStatus !== "CANCELLED")
+      .filter((f) => f.dueDate && f.actionStatus !== "DONE" && f.actionStatus !== "CANCELLED" && f.actionStatus !== "ROLLED_OVER")
       .map((f) => ({
         id: `followup-${f.id}`,
         title: `⚡ ${f.text.slice(0, 50)}`,
+        order: 2,
         start: f.dueDate!,
         allDay: true,
         backgroundColor: FOLLOWUP_COLOR.bg,
@@ -216,6 +218,7 @@ export function CalendarPage() {
             contentHeight={680}
             headerToolbar={false}
             events={events as any}
+            eventOrder="order"
             editable={false}
             selectable={true}
             selectMirror={true}

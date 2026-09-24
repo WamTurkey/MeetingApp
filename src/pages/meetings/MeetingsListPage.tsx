@@ -7,6 +7,7 @@ import { MeetingFilterBar, INITIAL_FILTERS, type MeetingFilters } from "@/featur
 import { CreateMeetingModal } from "@/features/create-meeting";
 import { fetchMeetings, createMeeting } from "@/services/meetingService";
 import type { Meeting } from "@/entities/meeting/model";
+import { toast } from "sonner";
 import type { MeetingListItem, CreateMeetingRequest } from "@/types/api";
 
 /** API MeetingListItem → frontend Meeting dönüşümü */
@@ -81,9 +82,11 @@ export function MeetingsListPage() {
       };
       await createMeeting(dto);
       setShowCreate(false);
+      toast.success("Toplantı başarıyla oluşturuldu");
       await loadMeetings();
     } catch (err) {
       console.error("[MeetingsListPage] Create Error:", err);
+      toast.error("Toplantı oluşturulamadı");
     }
   }
 

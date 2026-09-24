@@ -23,8 +23,7 @@ export interface FollowupItem extends BaseEntity {
   actionStatus: ActionStatus;
   actionStatusDisplay?: string;
   waitingReason: string;
-  blockerItemId: number | null;
-  blockerItemText?: string;
+  dependencyItemIds: number[];
   completedOn: string | null;
   developmentNote?: string;
   version: number;

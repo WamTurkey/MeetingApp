@@ -23,6 +23,7 @@ export interface ModalProps {
   size?: "sm" | "md" | "lg" | "xl" | "2xl";
   showClose?: boolean;
   className?: string;
+  headerActions?: ReactNode;
 }
 
 const sizeClasses = {
@@ -42,6 +43,7 @@ export function Modal({
   size = "md",
   showClose = true,
   className,
+  headerActions,
 }: ModalProps) {
   const panelRef = useRef<HTMLDivElement>(null);
   const { isTop, zIndex } = useModalStack(isOpen);
@@ -107,7 +109,7 @@ export function Modal({
         )}
       >
         {/* Header */}
-        {(title || showClose) && (
+        {(title || showClose || headerActions) && (
           <div className="flex shrink-0 items-start justify-between border-b border-surface-100 px-6 py-4 dark:border-surface-700">
             <div>
               {title && (
@@ -127,16 +129,19 @@ export function Modal({
                 </p>
               )}
             </div>
-            {showClose && (
-              <button
-                type="button"
-                onClick={onClose}
-                className="rounded-lg p-1.5 text-surface-400 transition-colors hover:bg-surface-100 hover:text-surface-600 dark:hover:bg-surface-700 dark:hover:text-surface-300"
-                aria-label="Kapat"
-              >
-                <X className="h-5 w-5" />
-              </button>
-            )}
+            <div className="flex items-center gap-2">
+              {headerActions}
+              {showClose && (
+                <button
+                  type="button"
+                  onClick={onClose}
+                  className="rounded-lg p-1.5 text-surface-400 transition-colors hover:bg-surface-100 hover:text-surface-600 dark:hover:bg-surface-700 dark:hover:text-surface-300"
+                  aria-label="Kapat"
+                >
+                  <X className="h-5 w-5" />
+                </button>
+              )}
+            </div>
           </div>
         )}
 

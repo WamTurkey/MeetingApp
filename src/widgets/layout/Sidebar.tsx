@@ -5,7 +5,6 @@ import {
   X, PanelLeftClose, PanelLeftOpen, ShieldCheck,
 } from "lucide-react";
 import { cn } from "@/shared/lib/cn";
-import { APP_NAME } from "@/shared/config/constants";
 import { useAuth } from "@/app/providers/AuthProvider";
 import type { UserRole } from "@/entities/user/model";
 
@@ -107,25 +106,19 @@ export function Sidebar({ isOpen, onClose, isCollapsed, onToggleCollapse }: Side
             )}
             title={isCollapsed ? "Menüyü Genişlet" : "Menüyü Daralt"}
           >
-            {/* Gradient Logo Badge */}
-            <div className="relative flex h-9 w-9 shrink-0 items-center justify-center rounded-xl bg-gradient-to-br from-brand-600 via-brand-500 to-brand-700 shadow-md shadow-brand-500/20 ring-1 ring-white/10 transition-transform duration-200 group-hover:scale-105">
-              <span className="text-base font-black leading-none text-white tracking-tight" style={{ fontFamily: "'Inter', sans-serif" }}>
-                T
-              </span>
-              <div className="absolute inset-0 rounded-xl bg-gradient-to-t from-transparent to-white/10" />
-            </div>
-
-            {/* Text — hidden when collapsed */}
+            {/* Logo */}
             <div className={cn(
-              "flex flex-col transition-all duration-200",
-              isCollapsed ? "lg:hidden lg:w-0 lg:opacity-0" : "lg:w-auto lg:opacity-100",
+              "flex items-center transition-all duration-200 overflow-hidden",
+              isCollapsed ? "w-9 h-9 justify-center" : "w-40 h-9"
             )}>
-              <span className="text-sm font-bold text-surface-900 dark:text-surface-50 whitespace-nowrap">
-                {APP_NAME}
-              </span>
-              <span className="text-2xs text-surface-400 dark:text-surface-500 whitespace-nowrap">
-                Kurumsal Yönetim Sistemi
-              </span>
+              <img 
+                src="/logo.png" 
+                alt="Logo" 
+                className={cn(
+                  "h-6 max-w-none transition-all duration-200 dark:brightness-0 dark:invert",
+                  isCollapsed ? "object-left object-cover w-7" : "object-contain w-auto"
+                )}
+              />
             </div>
           </button>
 

@@ -64,6 +64,7 @@ export const ACTION_STATUS = {
   IN_PROGRESS: "IN_PROGRESS",
   DONE: "DONE",
   CANCELLED: "CANCELLED",
+  ROLLED_OVER: "ROLLED_OVER",
 } as const;
 
 export type ActionStatus = (typeof ACTION_STATUS)[keyof typeof ACTION_STATUS];
@@ -73,6 +74,7 @@ export const ACTION_STATUS_LABEL: Record<ActionStatus, string> = {
   IN_PROGRESS: "Sürüyor",
   DONE: "Tamamlandı",
   CANCELLED: "İptal",
+  ROLLED_OVER: "Devredildi",
 };
 
 export const ACTION_STATUS_COLOR: Record<ActionStatus, string> = {
@@ -80,6 +82,7 @@ export const ACTION_STATUS_COLOR: Record<ActionStatus, string> = {
   IN_PROGRESS: "bg-warning-50 text-warning-700",
   DONE: "bg-success-50 text-success-700",
   CANCELLED: "bg-surface-100 text-surface-500",
+  ROLLED_OVER: "bg-purple-50 text-purple-700",
 };
 
 /** ── Attendance Status ──────────────────────────── */

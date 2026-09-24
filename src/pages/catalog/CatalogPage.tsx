@@ -1,3 +1,4 @@
+import { toast } from "sonner";
 import { useState, useMemo, useEffect, useCallback } from "react";
 import { Search, Settings2, Loader2, Plus, Pencil, Trash2, Building2, Users, FolderKanban, MapPin, Tag, Award } from "lucide-react";
 import { SearchBar } from "@/shared/ui/SearchBar";
@@ -63,7 +64,8 @@ export function CatalogPage() {
         fetchPersons(), fetchCompanies(), fetchProjects(), fetchLocations(), fetchCategories(), fetchTitles(),
       ]);
       setPeople(p); setCompanies(co); setProjects(pr); setLocations(lo); setCategories(ca); setTitles(ti);
-    } catch (err) { console.error("[Catalog] Load error:", err); }
+    } catch (err) {
+        toast.error("İşlem sırasında bir hata oluştu"); console.error("[Catalog] Load error:", err); }
     finally { setIsLoading(false); }
   }, []);
 
@@ -83,7 +85,8 @@ export function CatalogPage() {
         case "titles": await deleteTitle(id); break;
       }
       await loadAll();
-    } catch (err) { console.error("Delete error:", err); }
+    } catch (err) {
+        toast.error("İşlem sırasında bir hata oluştu"); console.error("Delete error:", err); }
   }, [activeTab, loadAll]);
 
   // ──────── Edit handlers ────────
@@ -252,6 +255,7 @@ export function CatalogPage() {
           isOpen={showCatalogModal}
           onClose={() => setShowCatalogModal(false)}
           onCreated={() => { setShowCatalogModal(false); loadAll(); }}
+          onDeleted={() => loadAll()}
         />
       )}
 
@@ -262,6 +266,7 @@ export function CatalogPage() {
           isOpen={showCatalogModal}
           onClose={() => setShowCatalogModal(false)}
           onCreated={() => { setShowCatalogModal(false); loadAll(); }}
+          onDeleted={() => loadAll()}
         />
       )}
 

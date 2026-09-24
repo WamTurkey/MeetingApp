@@ -28,7 +28,10 @@ export function NoteRow({ note, className }: NoteRowProps) {
   return (
     <div
       className={cn(
-        "flex gap-3 rounded-lg border border-surface-100 bg-white p-4 border-l-4 transition-colors dark:border-surface-700 dark:bg-surface-800",
+        "flex gap-3 rounded-lg border bg-white p-4 border-l-4 transition-colors dark:bg-surface-800",
+        note.dueDate
+          ? "border-red-300 ring-2 ring-red-200 dark:border-red-500/50 dark:ring-red-900/40"
+          : "border-surface-100 dark:border-surface-700",
         "hover:bg-surface-50/50 dark:hover:bg-surface-700/30",
         NOTE_TYPE_BORDER[note.noteType],
         className,
