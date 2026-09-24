@@ -79,7 +79,8 @@ public record FollowupItemDto(
 public record CreateFollowupItemDto(
     string Text, int? TopicId = null,
     int? ResponsiblePersonId = null, int? ResponsibleCompanyId = null,
-    string? DueDate = null, string? WaitingReason = null,
+    string? DueDate = null, string? ActionStatus = null,
+    string? WaitingReason = null,
     string? DevelopmentNote = null, int? BlockerItemId = null,
     int? SourceMeetingId = null, int? SourceNoteId = null);
 

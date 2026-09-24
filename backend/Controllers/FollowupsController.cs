@@ -88,17 +88,18 @@ public class FollowupsController : ControllerBase
             WaitingReason = dto.WaitingReason, DevelopmentNote = dto.DevelopmentNote,
             BlockerItemId = dto.BlockerItemId,
             SourceMeetingId = dto.SourceMeetingId, SourceNoteId = dto.SourceNoteId,
+            ActionStatus = dto.ActionStatus ?? "OPEN",
             CreatedBy = 1
         };
         _db.FollowupItems.Add(item);
+        await _db.SaveChangesAsync(); // Id atanması için önce kaydet
 
-        // Log oluşturma
+        // Log oluşturma — artık item.Id geçerli
         _db.FollowupChangeLogs.Add(new FollowupChangeLog
         {
             FollowupId = item.Id, Action = "CREATE",
             Description = "Takip maddesi oluşturuldu", ChangedBy = 1
         });
-
         await _db.SaveChangesAsync();
         return CreatedAtAction(nameof(GetById), new { id = item.Id }, await GetByIdInternal(item.Id));
     }
