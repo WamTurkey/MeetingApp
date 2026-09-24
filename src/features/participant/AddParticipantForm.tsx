@@ -1,13 +1,14 @@
 /**
  * AddParticipantForm — person-based participant addition.
  *
+ * - Company filter dropdown to narrow person list.
  * - Searchable ComboBox pulling from the active Persons pool.
  * - Auto-fills person data (name, email, title, company) on selection.
  * - Quick-add button for creating new persons inline.
  * - Outputs a clean { meeting_id, person_id, role } payload.
  */
 import { useState, useEffect, useMemo, useCallback } from "react";
-import { UserPlus } from "lucide-react";
+import { UserPlus, Building2 } from "lucide-react";
 import { Button } from "@/shared/ui/Button";
 import { Select } from "@/shared/ui/Select";
 import { ComboBox, type ComboBoxOption } from "@/shared/ui/ComboBox";
@@ -21,8 +22,8 @@ import type {
   Participant,
 } from "@/entities/participant/model";
 import { PARTICIPANT_ROLE_LABEL } from "@/entities/participant/model";
-import { fetchPersons } from "@/services/catalogService";
-import type { PersonDto } from "@/types/api";
+import { fetchPersons, fetchCompanies } from "@/services/catalogService";
+import type { PersonDto, CompanyDto } from "@/types/api";
 import type { Person } from "@/entities/person/model";
 
 /* ── Role options ────────────────────────────────── */
@@ -51,16 +52,10 @@ export function AddParticipantForm({
   onCancel,
   isLoading = false,
 }: AddParticipantFormProps) {
-  // People pool
+  // People + Companies pool
   const [people, setPeople] = useState<Person[]>([]);
-  useEffect(() => {
-    fetchPersons().then(data => {
-      setPeople(data.map((p: PersonDto) => ({
-        id: p.id, fullName: p.fullName, email: p.email, title: p.title,
-        companyName: p.companyName, isActive: p.isActive,
-      } as Person)));
-    }).catch(console.error);
-  }, []);
+  const [companies, setCompanies] = useState<CompanyDto[]>([]);
+  const [selectedCompanyId, setSelectedCompanyId] = useState<string>("");
   const [selectedPersonId, setSelectedPersonId] = useState<number | null>(null);
   const [role, setRole] = useState<ParticipantRole>("ATTENDEE");
   const [error, setError] = useState("");
@@ -73,22 +68,52 @@ export function AddParticipantForm({
   const [quickCompanyId, setQuickCompanyId] = useState<string>("");
   const [quickActive, setQuickActive] = useState(true);
 
+  // Load persons and companies on mount
+  useEffect(() => {
+    fetchPersons().then(data => {
+      setPeople(data.map((p: PersonDto) => ({
+        id: p.id, fullName: p.fullName, email: p.email ?? "", title: p.title ?? "",
+        companyId: p.companyId, companyName: p.companyName ?? undefined, isActive: p.isActive,
+        phone: p.phone ?? "", createdAt: "", updatedAt: "",
+      } as Person)));
+    }).catch(console.error);
+
+    fetchCompanies().then(data => {
+      setCompanies(data.filter(c => c.isActive));
+    }).catch(console.error);
+  }, []);
+
   // Exclude already-added participants from dropdown
   const existingPersonIds = useMemo(
     () => new Set(existingParticipants.map((p) => p.personId)),
     [existingParticipants],
   );
 
-  // ComboBox options — show "Ad Soyad — Unvan / Şirket"
+  // Company filter options
+  const companyFilterOptions: SelectOption[] = useMemo(
+    () => [
+      { value: "", label: "Tüm Firmalar" },
+      ...companies.map(c => ({ value: String(c.id), label: c.name })),
+    ],
+    [companies],
+  );
+
+  // ComboBox options — filtered by selected company
   const personOptions: ComboBoxOption[] = useMemo(
     () =>
       people
-        .filter((p) => p.isActive && !existingPersonIds.has(p.id))
+        .filter((p) => {
+          if (!p.isActive) return false;
+          if (existingPersonIds.has(p.id)) return false;
+          // Company filter
+          if (selectedCompanyId && p.companyId !== Number(selectedCompanyId)) return false;
+          return true;
+        })
         .map((p) => ({
           value: p.id,
           label: `${p.fullName}${p.title || p.companyName ? " — " : ""}${[p.title, p.companyName].filter(Boolean).join(" / ")}`,
         })),
-    [people, existingPersonIds],
+    [people, existingPersonIds, selectedCompanyId],
   );
 
   // Selected person details
@@ -97,11 +122,24 @@ export function AddParticipantForm({
     [selectedPersonId, people],
   );
 
-  // Company options for quick-add
+  // Company options for quick-add modal
   const companyOptions: SelectOption[] = useMemo(
-    () => [],
-    [],
+    () => [
+      { value: "", label: "Firma seçiniz (opsiyonel)" },
+      ...companies.map(c => ({ value: String(c.id), label: c.name })),
+    ],
+    [companies],
   );
+
+  /* ── When company filter changes, clear selected person if not matching ── */
+
+  useEffect(() => {
+    if (selectedCompanyId && selectedPerson) {
+      if (selectedPerson.companyId !== Number(selectedCompanyId)) {
+        setSelectedPersonId(null);
+      }
+    }
+  }, [selectedCompanyId]); // eslint-disable-line react-hooks/exhaustive-deps
 
   /* ── Submit ──────────────────────────────────── */
 
@@ -112,30 +150,31 @@ export function AddParticipantForm({
     }
     setError("");
     await onSubmit({
-      
       personId: selectedPersonId,
       role,
     });
     // Reset
     setSelectedPersonId(null);
     setRole("ATTENDEE");
+    setSelectedCompanyId("");
   }
 
   /* ── Quick-add person ────────────────────────── */
 
   const handleQuickAddSave = useCallback(() => {
     if (!quickName.trim()) return;
-    const company = quickCompanyId
-      ? ({} as any)
-      : null;
+    const companyId = quickCompanyId ? Number(quickCompanyId) : null;
+    const companyName = companyId
+      ? companies.find(c => c.id === companyId)?.name
+      : undefined;
     const newPerson: Person = {
       id: Date.now(),
       fullName: quickName.trim(),
       email: quickEmail.trim(),
       title: quickTitle.trim(),
       phone: "",
-      companyId: company ? company.id : null,
-      companyName: company?.name,
+      companyId,
+      companyName,
       isActive: quickActive,
       createdAt: new Date().toISOString(),
       updatedAt: new Date().toISOString(),
@@ -149,16 +188,30 @@ export function AddParticipantForm({
     setQuickTitle("");
     setQuickCompanyId("");
     setQuickActive(true);
-  }, [quickName, quickEmail, quickTitle, quickCompanyId, quickActive]);
+  }, [quickName, quickEmail, quickTitle, quickCompanyId, quickActive, companies]);
 
   return (
     <>
       <div className="space-y-4">
-        {/* ── Person selector + Role ──────────────── */}
-        <div className="grid grid-cols-1 gap-3 sm:grid-cols-[1fr_160px]">
+        {/* ── Company filter + Person selector + Role ──── */}
+        <div className="grid grid-cols-1 gap-3 sm:grid-cols-[180px_1fr_160px]">
+          <Select
+            label="Firma Filtrele"
+            options={companyFilterOptions}
+            value={selectedCompanyId}
+            onChange={(e) => {
+              setSelectedCompanyId(e.target.value);
+              setError("");
+            }}
+            disabled={isLoading}
+          />
+
           <ComboBox
             label="Kişi Seçiniz"
-            placeholder="Aramak için yazmaya başlayın..."
+            placeholder={selectedCompanyId
+              ? `${companies.find(c => c.id === Number(selectedCompanyId))?.name ?? "Firma"} çalışanları...`
+              : "Aramak için yazmaya başlayın..."
+            }
             value={selectedPersonId}
             onChange={(val) => {
               setSelectedPersonId(val);
@@ -178,6 +231,24 @@ export function AddParticipantForm({
             disabled={isLoading}
           />
         </div>
+
+        {/* ── Company filter hint ──────────────────── */}
+        {selectedCompanyId && (
+          <div className="flex items-center gap-2 rounded-lg bg-brand-50/60 px-3 py-2 text-xs text-brand-700 dark:bg-brand-950/30 dark:text-brand-300">
+            <Building2 className="h-3.5 w-3.5 shrink-0" />
+            <span>
+              <strong>{companies.find(c => c.id === Number(selectedCompanyId))?.name}</strong> firmasına ait{" "}
+              <strong>{personOptions.length}</strong> kişi listeleniyor.
+            </span>
+            <button
+              type="button"
+              onClick={() => setSelectedCompanyId("")}
+              className="ml-auto text-brand-500 underline hover:text-brand-700 dark:hover:text-brand-200"
+            >
+              Filtreyi kaldır
+            </button>
+          </div>
+        )}
 
         {/* ── Selected person preview ─────────────── */}
         {selectedPerson && (
@@ -261,7 +332,6 @@ export function AddParticipantForm({
           </div>
           <Select
             label="Firma"
-            placeholder="Firma seçiniz (opsiyonel)"
             options={companyOptions}
             value={quickCompanyId}
             onChange={(e) => setQuickCompanyId(e.target.value)}
