@@ -1,17 +1,17 @@
 /**
  * PersonModal — Kişi ekleme/düzenleme modal formu.
  *
- * Alanlar: Ad Soyad, E-posta, Unvan, Telefon, Firma Seçimi, Aktiflik
+ * Alanlar: Ad Soyad, E-posta, Unvan (Select), Telefon, Firma (Select), Aktiflik
  */
-import { useState, useEffect, type FormEvent } from "react";
+import { useState, useEffect, useMemo, type FormEvent } from "react";
 import { UserPlus, Save } from "lucide-react";
 import { Modal } from "@/shared/ui/Modal";
 import { Button } from "@/shared/ui/Button";
 import { Input } from "@/shared/ui/Input";
 import { Select } from "@/shared/ui/Select";
 import { Checkbox } from "@/shared/ui/Checkbox";
-import { createPerson, updatePerson } from "@/services/catalogService";
-import type { PersonDto, CompanyDto } from "@/types/api";
+import { createPerson, updatePerson, fetchTitles } from "@/services/catalogService";
+import type { PersonDto, CompanyDto, TitleDto } from "@/types/api";
 
 interface PersonModalProps {
   isOpen: boolean;
@@ -26,33 +26,45 @@ export function PersonModal({ isOpen, onClose, onSaved, editingPerson, companies
 
   const [fullName, setFullName] = useState("");
   const [email, setEmail] = useState("");
-  const [title, setTitle] = useState("");
+  const [titleId, setTitleId] = useState<string>("");  // title as select
   const [phone, setPhone] = useState("");
   const [companyId, setCompanyId] = useState<string>("");
   const [isActive, setIsActive] = useState(true);
   const [isSaving, setIsSaving] = useState(false);
   const [error, setError] = useState("");
 
+  // Load titles from API
+  const [titles, setTitles] = useState<TitleDto[]>([]);
+  useEffect(() => {
+    fetchTitles().then(setTitles).catch(console.error);
+  }, []);
+
   // Populate form when editing
   useEffect(() => {
     if (isOpen && editingPerson) {
       setFullName(editingPerson.fullName);
       setEmail(editingPerson.email ?? "");
-      setTitle(editingPerson.title ?? "");
+      // Match title text to a title ID
+      const matchingTitle = titles.find(t => t.name === editingPerson.title);
+      setTitleId(matchingTitle ? String(matchingTitle.id) : "");
       setPhone(editingPerson.phone ?? "");
       setCompanyId(editingPerson.companyId ? String(editingPerson.companyId) : "");
       setIsActive(editingPerson.isActive);
     } else if (isOpen) {
-      // Reset for new person
-      setFullName(""); setEmail(""); setTitle(""); setPhone(""); setCompanyId(""); setIsActive(true);
+      setFullName(""); setEmail(""); setTitleId(""); setPhone(""); setCompanyId(""); setIsActive(true);
     }
     setError("");
-  }, [isOpen, editingPerson]);
+  }, [isOpen, editingPerson, titles]);
 
-  const companyOptions = [
+  const companyOptions = useMemo(() => [
     { value: "", label: "Firma seçiniz (opsiyonel)" },
     ...companies.filter(c => c.isActive).map(c => ({ value: String(c.id), label: c.name })),
-  ];
+  ], [companies]);
+
+  const titleOptions = useMemo(() => [
+    { value: "", label: "Unvan seçiniz (opsiyonel)" },
+    ...titles.filter(t => t.isActive).map(t => ({ value: String(t.id), label: t.name })),
+  ], [titles]);
 
   async function handleSubmit(e: FormEvent) {
     e.preventDefault();
@@ -61,12 +73,15 @@ export function PersonModal({ isOpen, onClose, onSaved, editingPerson, companies
     setIsSaving(true);
     setError("");
 
+    // Resolve title name from ID
+    const selectedTitle = titleId ? titles.find(t => t.id === Number(titleId))?.name : undefined;
+
     try {
       if (isEdit && editingPerson) {
         await updatePerson(editingPerson.id, {
           fullName: fullName.trim(),
           email: email.trim() || undefined,
-          title: title.trim() || undefined,
+          title: selectedTitle || undefined,
           phone: phone.trim() || undefined,
           companyId: companyId ? Number(companyId) : undefined,
           isActive,
@@ -75,7 +90,7 @@ export function PersonModal({ isOpen, onClose, onSaved, editingPerson, companies
         await createPerson({
           fullName: fullName.trim(),
           email: email.trim() || undefined,
-          title: title.trim() || undefined,
+          title: selectedTitle || undefined,
           phone: phone.trim() || undefined,
           companyId: companyId ? Number(companyId) : undefined,
         });
@@ -107,11 +122,11 @@ export function PersonModal({ isOpen, onClose, onSaved, editingPerson, companies
         />
 
         <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
-          <Input
+          <Select
             label="Unvan / Görev"
-            placeholder="Örn: Proje Müdürü"
-            value={title}
-            onChange={(e) => setTitle(e.target.value)}
+            options={titleOptions}
+            value={titleId}
+            onChange={(e) => setTitleId(e.target.value)}
             disabled={isSaving}
           />
           <Select

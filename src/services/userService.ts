@@ -1,22 +1,25 @@
 import apiClient from "./apiClient";
-import type { UserDto, UserPreferenceDto, SetPreferenceRequest } from "../types/api";
 
-export async function fetchUsers(): Promise<UserDto[]> {
-  const { data } = await apiClient.get<UserDto[]>("/Users");
+export interface UserListDto {
+  id: number;
+  email: string;
+  fullName: string;
+  isActive: boolean;
+  isSuperuser: boolean;
+  role: string;
+}
+
+export async function fetchUsers(): Promise<UserListDto[]> {
+  const { data } = await apiClient.get<UserListDto[]>("/Users");
   return data;
 }
 
-export async function fetchUserById(id: number): Promise<UserDto> {
-  const { data } = await apiClient.get<UserDto>(`/Users/${id}`);
+export async function updateUserRole(userId: number, role: string): Promise<UserListDto> {
+  const { data } = await apiClient.put<UserListDto>(`/Users/${userId}/role`, { role });
   return data;
 }
 
-export async function fetchUserPreferences(userId: number): Promise<UserPreferenceDto[]> {
-  const { data } = await apiClient.get<UserPreferenceDto[]>(`/Users/${userId}/preferences`);
-  return data;
-}
-
-export async function setUserPreference(userId: number, dto: SetPreferenceRequest): Promise<UserPreferenceDto> {
-  const { data } = await apiClient.post<UserPreferenceDto>(`/Users/${userId}/preferences`, dto);
+export async function toggleUserActive(userId: number, isActive: boolean): Promise<UserListDto> {
+  const { data } = await apiClient.put<UserListDto>(`/Users/${userId}/active`, isActive);
   return data;
 }

@@ -1,5 +1,5 @@
 import { useState, useMemo, useEffect, useCallback } from "react";
-import { Search, Settings2, Loader2, Plus, Pencil, Trash2, Building2, Users, FolderKanban, MapPin, Tag } from "lucide-react";
+import { Search, Settings2, Loader2, Plus, Pencil, Trash2, Building2, Users, FolderKanban, MapPin, Tag, Award } from "lucide-react";
 import { SearchBar } from "@/shared/ui/SearchBar";
 import { Badge } from "@/shared/ui/Badge";
 import { Button } from "@/shared/ui/Button";
@@ -9,11 +9,12 @@ import { CatalogModal, type CatalogKind } from "@/features/manage-catalog";
 import { PersonModal } from "./PersonModal";
 import {
   fetchPersons, fetchCompanies, fetchProjects, fetchLocations, fetchCategories,
-  deletePerson, deleteCompany, deleteProject, deleteLocation, deleteCategory,
+  deletePerson, deleteCompany, deleteProject, deleteLocation, deleteCategory, deleteTitle,
+  fetchTitles,
 } from "@/services/catalogService";
-import type { PersonDto, CompanyDto, ProjectDto, LocationDto, CategoryDto } from "@/types/api";
+import type { PersonDto, CompanyDto, ProjectDto, LocationDto, CategoryDto, TitleDto } from "@/types/api";
 
-type TabKey = "people" | CatalogKind;
+type TabKey = "people" | "titles" | CatalogKind;
 
 const TABS: { key: TabKey; label: string; icon: React.ReactNode }[] = [
   { key: "people", label: "Kişiler", icon: <Users className="h-4 w-4" /> },
@@ -21,10 +22,11 @@ const TABS: { key: TabKey; label: string; icon: React.ReactNode }[] = [
   { key: "projects", label: "Projeler", icon: <FolderKanban className="h-4 w-4" /> },
   { key: "locations", label: "Toplantı Yerleri", icon: <MapPin className="h-4 w-4" /> },
   { key: "categories", label: "Kategoriler", icon: <Tag className="h-4 w-4" /> },
+  { key: "titles", label: "Unvanlar", icon: <Award className="h-4 w-4" /> },
 ];
 
 const TAB_LABELS: Record<TabKey, string> = {
-  people: "Kişi", companies: "Firma", projects: "Proje", locations: "Toplantı Yeri", categories: "Kategori",
+  people: "Kişi", companies: "Firma", projects: "Proje", locations: "Toplantı Yeri", categories: "Kategori", titles: "Unvan",
 };
 
 type CatalogRow = {
@@ -47,6 +49,7 @@ export function CatalogPage() {
   const [projects, setProjects] = useState<ProjectDto[]>([]);
   const [locations, setLocations] = useState<LocationDto[]>([]);
   const [categories, setCategories] = useState<CategoryDto[]>([]);
+  const [titles, setTitles] = useState<TitleDto[]>([]);
 
   // Modal state
   const [showCatalogModal, setShowCatalogModal] = useState(false);
@@ -56,10 +59,10 @@ export function CatalogPage() {
   const loadAll = useCallback(async () => {
     try {
       setIsLoading(true);
-      const [p, co, pr, lo, ca] = await Promise.all([
-        fetchPersons(), fetchCompanies(), fetchProjects(), fetchLocations(), fetchCategories(),
+      const [p, co, pr, lo, ca, ti] = await Promise.all([
+        fetchPersons(), fetchCompanies(), fetchProjects(), fetchLocations(), fetchCategories(), fetchTitles(),
       ]);
-      setPeople(p); setCompanies(co); setProjects(pr); setLocations(lo); setCategories(ca);
+      setPeople(p); setCompanies(co); setProjects(pr); setLocations(lo); setCategories(ca); setTitles(ti);
     } catch (err) { console.error("[Catalog] Load error:", err); }
     finally { setIsLoading(false); }
   }, []);
@@ -77,6 +80,7 @@ export function CatalogPage() {
         case "projects": await deleteProject(id); break;
         case "locations": await deleteLocation(id); break;
         case "categories": await deleteCategory(id); break;
+        case "titles": await deleteTitle(id); break;
       }
       await loadAll();
     } catch (err) { console.error("Delete error:", err); }
@@ -117,6 +121,7 @@ export function CatalogPage() {
       case "projects": return filterActive(projects).map((p) => ({ id: p.id, primary: p.name, secondary: p.code ?? "—", tertiary: "", isActive: p.isActive }));
       case "locations": return filterActive(locations).map((l) => ({ id: l.id, primary: l.name, secondary: "", tertiary: "", isActive: l.isActive }));
       case "categories": return filterActive(categories).map((c) => ({ id: c.id, primary: c.name, secondary: "", tertiary: "", isActive: c.isActive }));
+      case "titles": return filterActive(titles).map((t) => ({ id: t.id, primary: t.name, secondary: "", tertiary: "", isActive: t.isActive }));
     }
   }, [activeTab, search, showArchived, people, companies, projects, locations, categories]);
 
@@ -128,6 +133,7 @@ export function CatalogPage() {
       case "projects": return ["Proje Adı", "Proje Kodu", ""];
       case "locations": return ["Yer Adı", "", ""];
       case "categories": return ["Kategori Adı", "", ""];
+      case "titles": return ["Unvan Adı", "", ""];
     }
   }, [activeTab]);
 
@@ -240,9 +246,19 @@ export function CatalogPage() {
       )}
 
       {/* Catalog Modal — for Companies, Projects, Locations, Categories */}
-      {activeTab !== "people" && (
+      {activeTab !== "people" && activeTab !== "titles" && (
         <CatalogModal
           kind={activeTab as CatalogKind}
+          isOpen={showCatalogModal}
+          onClose={() => setShowCatalogModal(false)}
+          onCreated={() => { setShowCatalogModal(false); loadAll(); }}
+        />
+      )}
+
+      {/* Catalog Modal — for Titles tab */}
+      {activeTab === "titles" && (
+        <CatalogModal
+          kind="titles"
           isOpen={showCatalogModal}
           onClose={() => setShowCatalogModal(false)}
           onCreated={() => { setShowCatalogModal(false); loadAll(); }}

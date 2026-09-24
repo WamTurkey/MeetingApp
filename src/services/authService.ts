@@ -16,6 +16,7 @@ export interface LoginResponse {
   email: string;
   fullName: string;
   token: string;
+  role: string;
 }
 
 export interface UserMeResponse {
@@ -24,6 +25,7 @@ export interface UserMeResponse {
   fullName: string;
   isActive: boolean;
   isSuperuser: boolean;
+  role: string;
 }
 
 const TOKEN_KEY = "auth_token";

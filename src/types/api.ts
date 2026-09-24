@@ -129,6 +129,24 @@ export interface UpdateCategoryRequest {
   isActive: boolean;
 }
 
+
+// ──────────── Title (Unvan) ────────────
+
+export interface TitleDto {
+  id: number;
+  name: string;
+  isActive: boolean;
+}
+
+export interface CreateTitleRequest {
+  name: string;
+}
+
+export interface UpdateTitleRequest {
+  name: string;
+  isActive: boolean;
+}
+
 // ──────────── Person ────────────
 
 export interface PersonDto {

@@ -76,4 +76,37 @@ app.UseAuthentication();   // JWT auth middleware
 app.UseAuthorization();
 app.MapControllers();
 
+
+// ──────────── Auto-migrate: Titles table + User.Role column ──────────
+using (var scope = app.Services.CreateScope())
+{
+    var db = scope.ServiceProvider.GetRequiredService<MeetingDbContext>();
+    try
+    {
+        db.Database.ExecuteSqlRaw(@"
+            IF NOT EXISTS (SELECT * FROM sys.tables WHERE name = 'Titles' AND schema_id = SCHEMA_ID('dbo'))
+            CREATE TABLE [dbo].[Titles] (
+                [Id] INT IDENTITY(1,1) PRIMARY KEY, [Name] NVARCHAR(100) NOT NULL,
+                [IsActive] BIT NOT NULL DEFAULT 1, [IsDeleted] BIT NOT NULL DEFAULT 0,
+                [CreatedAt] DATETIME2 NOT NULL DEFAULT GETUTCDATE(), [UpdatedAt] DATETIME2 NOT NULL DEFAULT GETUTCDATE(),
+                [CreatedBy] INT NULL, [UpdatedBy] INT NULL, [DeletedAt] DATETIME2 NULL, [DeletedBy] INT NULL
+            )");
+        db.Database.ExecuteSqlRaw(@"
+            IF NOT EXISTS (SELECT * FROM sys.columns WHERE object_id = OBJECT_ID('dbo.Users') AND name = 'Role')
+            ALTER TABLE [dbo].[Users] ADD [Role] NVARCHAR(30) NOT NULL DEFAULT 'User'");
+        db.Database.ExecuteSqlRaw(@"
+            IF NOT EXISTS (SELECT 1 FROM [dbo].[Titles] WHERE [Name] = N'Genel Müdür')
+            INSERT INTO [dbo].[Titles] ([Name]) VALUES
+                (N'Genel Müdür'),(N'Genel Müdür Yardımcısı'),(N'Proje Müdürü'),(N'Proje Koordinatörü'),
+                (N'Yazılım Mimarı'),(N'Kıdemli Yazılım Geliştirici'),(N'Yazılım Geliştirici'),
+                (N'Backend Geliştirici'),(N'Frontend Geliştirici'),(N'IT Yöneticisi'),(N'Sistem Yöneticisi'),
+                (N'Saha Mühendisi'),(N'Enerji Mühendisi'),(N'İnşaat Mühendisi'),
+                (N'İş Geliştirme Uzmanı'),(N'Satış Müdürü'),(N'Kalite Sorumlusu'),(N'İK Uzmanı'),
+                (N'Mali İşler Müdürü'),(N'Muhasebe Sorumlusu'),(N'Hukuk Müşaviri'),(N'Danışman'),(N'Stajyer'),(N'Diğer')");
+        db.Database.ExecuteSqlRaw("UPDATE [dbo].[Users] SET [Role] = 'Admin' WHERE [Email] = 'admin@wam.com.tr' AND [Role] = 'User'");
+    }
+    catch (Exception ex) { Console.WriteLine($"[Migration] {ex.Message}"); }
+}
+
+
 app.Run();

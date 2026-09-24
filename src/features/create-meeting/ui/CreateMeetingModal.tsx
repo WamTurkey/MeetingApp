@@ -123,6 +123,7 @@ export function CreateMeetingModal({
       projects: "projectId",
       companies: "companyId",
       locations: "locationId",
+    titles: "title" as never,
     };
     setValue(fieldMap[kind], id as never);
     setActiveCatalog(null);

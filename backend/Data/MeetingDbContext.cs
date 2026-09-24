@@ -35,6 +35,7 @@ public class MeetingDbContext : DbContext
     public DbSet<Location> Locations => Set<Location>();
     public DbSet<Category> Categories => Set<Category>();
     public DbSet<Person> Persons => Set<Person>();
+    public DbSet<Title> Titles => Set<Title>();
 
     // ──────────── İş Tabloları (7) ────────────────
     public DbSet<Meeting> Meetings => Set<Meeting>();
@@ -181,6 +182,18 @@ public class MeetingDbContext : DbContext
             e.HasOne(x => x.CreatedByUser).WithMany().HasForeignKey(x => x.CreatedBy).OnDelete(DeleteBehavior.Restrict);
             e.HasOne(x => x.UpdatedByUser).WithMany().HasForeignKey(x => x.UpdatedBy).OnDelete(DeleteBehavior.Restrict);
             e.HasOne(x => x.DeletedByUser).WithMany().HasForeignKey(x => x.DeletedBy).OnDelete(DeleteBehavior.Restrict);
+        });
+
+
+        // ──── Titles (Unvanlar) ────
+        modelBuilder.Entity<Title>(e =>
+        {
+            e.ToTable("Titles", "dbo");
+            e.HasKey(t => t.Id);
+            e.Property(t => t.Name).HasMaxLength(100).IsRequired();
+            e.HasQueryFilter(t => !t.IsDeleted);
+            e.Property(t => t.CreatedAt).HasDefaultValueSql("GETUTCDATE()");
+            e.Property(t => t.UpdatedAt).HasDefaultValueSql("GETUTCDATE()");
         });
 
         modelBuilder.Entity<Person>(e =>

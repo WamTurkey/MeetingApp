@@ -10,9 +10,10 @@ import {
   fetchCompanies, fetchProjects, fetchLocations, fetchCategories,
   createCompany, createProject, createLocation, createCategory,
   deleteCompany, deleteProject, deleteLocation, deleteCategory,
+  fetchTitles, createTitle, deleteTitle,
 } from "@/services/catalogService";
 
-export type CatalogKind = "projects" | "companies" | "locations" | "categories";
+export type CatalogKind = "projects" | "companies" | "locations" | "categories" | "titles";
 
 interface CatalogItem {
   id: number;
@@ -49,6 +50,12 @@ const CATALOG_FIELDS: Record<CatalogKind, { label: string; fields: { key: string
       { key: "name", label: "Kategori Adı *", placeholder: "Örn: Proje İlerleme Toplantısı" },
     ],
   },
+  titles: {
+    label: "Unvan",
+    fields: [
+      { key: "name", label: "Unvan Adı *", placeholder: "Örn: Proje Müdürü" },
+    ],
+  },
 };
 
 export function useCatalog(kind: CatalogKind) {
@@ -73,6 +80,9 @@ export function useCatalog(kind: CatalogKind) {
           break;
         case "categories":
           data = (await fetchCategories()).map(c => ({ id: c.id, name: c.name, isActive: c.isActive }));
+          break;
+        case "titles":
+          data = (await fetchTitles()).map(t => ({ id: t.id, name: t.name, isActive: t.isActive }));
           break;
       }
       setItems(data);
@@ -107,6 +117,9 @@ export function useCatalog(kind: CatalogKind) {
           case "categories":
             await createCategory({ name: data.name as string });
             break;
+          case "titles":
+            await createTitle({ name: data.name as string });
+            break;
         }
         await load(); // yeniden yükle
       } catch (err) {
@@ -124,6 +137,7 @@ export function useCatalog(kind: CatalogKind) {
           case "projects": await deleteProject(id); break;
           case "locations": await deleteLocation(id); break;
           case "categories": await deleteCategory(id); break;
+          case "titles": await deleteTitle(id); break;
         }
         await load();
       } catch (err) {

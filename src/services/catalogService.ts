@@ -5,6 +5,7 @@ import type {
   LocationDto, CreateLocationRequest, UpdateLocationRequest,
   CategoryDto, CreateCategoryRequest, UpdateCategoryRequest,
   PersonDto, CreatePersonRequest, UpdatePersonRequest,
+  TitleDto, CreateTitleRequest, UpdateTitleRequest,
 } from "../types/api";
 
 // ──────────── Companies ────────────
@@ -110,4 +111,25 @@ export async function updatePerson(id: number, dto: UpdatePersonRequest): Promis
 
 export async function deletePerson(id: number): Promise<void> {
   await apiClient.delete(`/Persons/${id}`);
+}
+
+// ──────────── Titles (Unvanlar) ────────────
+
+export async function fetchTitles(): Promise<TitleDto[]> {
+  const { data } = await apiClient.get<TitleDto[]>("/Titles");
+  return data;
+}
+
+export async function createTitle(dto: CreateTitleRequest): Promise<TitleDto> {
+  const { data } = await apiClient.post<TitleDto>("/Titles", dto);
+  return data;
+}
+
+export async function updateTitle(id: number, dto: UpdateTitleRequest): Promise<TitleDto> {
+  const { data } = await apiClient.put<TitleDto>(`/Titles/${id}`, dto);
+  return data;
+}
+
+export async function deleteTitle(id: number): Promise<void> {
+  await apiClient.delete(`/Titles/${id}`);
 }

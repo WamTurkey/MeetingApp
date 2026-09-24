@@ -14,6 +14,7 @@ import { CalendarPage } from "@/pages/calendar/CalendarPage";
 import { GlobalSearchPage } from "@/pages/search/GlobalSearchPage";
 import { ReportsPage } from "@/pages/reports/ReportsPage";
 import { SettingsPage } from "@/pages/settings/SettingsPage";
+import { UserManagementPage } from "@/pages/user-management/UserManagementPage";
 import { NotFoundPage } from "@/pages/not-found/NotFoundPage";
 
 export const router = createBrowserRouter([
@@ -41,6 +42,7 @@ export const router = createBrowserRouter([
       { path: "search", element: <GlobalSearchPage /> },
       { path: "reports", element: <ReportsPage /> },
       { path: "settings", element: <SettingsPage /> },
+      { path: "user-management", element: <UserManagementPage /> },
       { path: "*", element: <NotFoundPage /> },
     ],
   },

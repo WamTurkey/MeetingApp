@@ -50,6 +50,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
           fullName: data.fullName,
           isActive: data.isActive,
           isSuperuser: data.isSuperuser,
+          role: (data.role as any) || "User",
           createdAt: "",
           updatedAt: "",
         });
@@ -77,6 +78,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         fullName: data.fullName,
         isActive: true,
         isSuperuser: false,
+        role: (data.role as any) || "User",
         createdAt: "",
         updatedAt: "",
       });
@@ -103,6 +105,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         fullName: res.fullName,
         isActive: true,
         isSuperuser: false,
+        role: (res.role as any) || "User",
         createdAt: "",
         updatedAt: "",
       });

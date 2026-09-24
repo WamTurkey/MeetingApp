@@ -37,7 +37,7 @@ public class AuthController : ControllerBase
 
         var token = GenerateJwtToken(user);
 
-        return Ok(new LoginResponseDto(user.Id, user.Email, user.FullName, token));
+        return Ok(new LoginResponseDto(user.Id, user.Email, user.FullName, token, user.Role));
     }
 
     /// <summary>POST /api/Auth/register</summary>
@@ -62,7 +62,7 @@ public class AuthController : ControllerBase
         await _db.SaveChangesAsync();
 
         var token = GenerateJwtToken(user);
-        return CreatedAtAction(nameof(Me), new LoginResponseDto(user.Id, user.Email, user.FullName, token));
+        return CreatedAtAction(nameof(Me), new LoginResponseDto(user.Id, user.Email, user.FullName, token, user.Role));
     }
 
     /// <summary>GET /api/Auth/me — returns the current logged-in user</summary>
@@ -78,7 +78,7 @@ public class AuthController : ControllerBase
         if (user == null || !user.IsActive)
             return Unauthorized();
 
-        return Ok(new UserDto(user.Id, user.Email, user.FullName, user.IsActive, user.IsSuperuser));
+        return Ok(new UserDto(user.Id, user.Email, user.FullName, user.IsActive, user.IsSuperuser, user.Role));
     }
 
     // ──────────── JWT Token Generation ────────────
@@ -95,6 +95,7 @@ public class AuthController : ControllerBase
             new Claim(ClaimTypes.Email, user.Email),
             new Claim(ClaimTypes.Name, user.FullName),
             new Claim("isSuperuser", user.IsSuperuser.ToString().ToLower()),
+            new Claim(ClaimTypes.Role, user.Role),
         };
 
         var expireMinutes = int.TryParse(_config["Jwt:ExpireMinutes"], out var min) ? min : 480;

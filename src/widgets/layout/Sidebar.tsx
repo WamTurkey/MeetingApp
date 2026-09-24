@@ -2,12 +2,28 @@ import { NavLink } from "react-router-dom";
 import {
   LayoutDashboard, CalendarDays, CalendarClock, Calendar,
   ClipboardCheck, Search, BarChart3, Users, Settings,
-  X, PanelLeftClose, PanelLeftOpen,
+  X, PanelLeftClose, PanelLeftOpen, ShieldCheck,
 } from "lucide-react";
 import { cn } from "@/shared/lib/cn";
 import { APP_NAME } from "@/shared/config/constants";
+import { useAuth } from "@/app/providers/AuthProvider";
+import type { UserRole } from "@/entities/user/model";
 
-const NAV_SECTIONS = [
+interface NavItem {
+  to: string;
+  icon: typeof LayoutDashboard;
+  label: string;
+  end: boolean;
+  /** Minimum roles required — undefined = visible to all */
+  roles?: UserRole[];
+}
+
+interface NavSection {
+  title: string | null;
+  items: NavItem[];
+}
+
+const NAV_SECTIONS: NavSection[] = [
   {
     title: null,
     items: [
@@ -33,7 +49,8 @@ const NAV_SECTIONS = [
   {
     title: "Yönetim",
     items: [
-      { to: "/catalog", icon: Users, label: "Kişiler ve Tanımlar", end: false },
+      { to: "/catalog", icon: Users, label: "Kişiler ve Tanımlar", end: false, roles: ["Admin", "CatalogManager"] },
+      { to: "/user-management", icon: ShieldCheck, label: "Kullanıcı Yönetimi", end: false, roles: ["Admin"] },
       { to: "/settings", icon: Settings, label: "Ayarlar", end: false },
     ],
   },
@@ -49,6 +66,15 @@ interface SidebarProps {
 }
 
 export function Sidebar({ isOpen, onClose, isCollapsed, onToggleCollapse }: SidebarProps) {
+  const { user } = useAuth();
+  const userRole = user?.role ?? "User";
+
+  // Filter nav items by role
+  function isVisible(item: NavItem): boolean {
+    if (!item.roles) return true;
+    return item.roles.includes(userRole);
+  }
+
   return (
     <>
       {/* Mobile overlay */}
@@ -83,11 +109,9 @@ export function Sidebar({ isOpen, onClose, isCollapsed, onToggleCollapse }: Side
           >
             {/* Gradient Logo Badge */}
             <div className="relative flex h-9 w-9 shrink-0 items-center justify-center rounded-xl bg-gradient-to-br from-brand-600 via-brand-500 to-brand-700 shadow-md shadow-brand-500/20 ring-1 ring-white/10 transition-transform duration-200 group-hover:scale-105">
-              {/* Stylized "T" monogram */}
               <span className="text-base font-black leading-none text-white tracking-tight" style={{ fontFamily: "'Inter', sans-serif" }}>
                 T
               </span>
-              {/* Subtle inner glow */}
               <div className="absolute inset-0 rounded-xl bg-gradient-to-t from-transparent to-white/10" />
             </div>
 
@@ -133,50 +157,54 @@ export function Sidebar({ isOpen, onClose, isCollapsed, onToggleCollapse }: Side
 
         {/* ── Navigation ───────────────────────────── */}
         <nav className="flex-1 overflow-y-auto overflow-x-hidden px-2 py-4">
-          {NAV_SECTIONS.map((section, si) => (
-            <div key={si} className={cn(si > 0 && "mt-6")}>
-              {section.title && !isCollapsed && (
-                <p className="mb-2 px-3 text-2xs font-semibold uppercase tracking-widest text-surface-400 dark:text-surface-500 transition-opacity duration-200">
-                  {section.title}
-                </p>
-              )}
-              {section.title && isCollapsed && (
-                <div className="mx-auto mb-2 hidden h-px w-8 bg-surface-200 lg:block dark:bg-surface-700" />
-              )}
-              <div className="space-y-1">
-                {section.items.map(({ to, icon: Icon, label, end }) => (
-                  <NavLink
-                    key={to}
-                    to={to}
-                    end={end}
-                    onClick={onClose}
-                    title={isCollapsed ? label : undefined}
-                    className={({ isActive }) =>
-                      cn(
-                        "group flex items-center rounded-xl text-sm font-medium transition-all duration-150",
-                        isCollapsed
-                          ? "lg:justify-center lg:px-0 lg:py-2.5 px-3 py-2.5"
-                          : "gap-3 px-3 py-2.5",
-                        isActive
-                          ? "bg-brand-50 text-brand-700 shadow-sm dark:bg-brand-950/50 dark:text-brand-400"
-                          : "text-surface-600 hover:bg-surface-50 hover:text-surface-900 dark:text-surface-400 dark:hover:bg-surface-800 dark:hover:text-surface-200",
-                      )
-                    }
-                  >
-                    <Icon className="h-5 w-5 shrink-0" />
-                    <span
-                      className={cn(
-                        "transition-all duration-200 whitespace-nowrap",
-                        isCollapsed ? "lg:hidden lg:w-0 lg:opacity-0" : "lg:w-auto lg:opacity-100",
-                      )}
+          {NAV_SECTIONS.map((section, si) => {
+            const visibleItems = section.items.filter(isVisible);
+            if (visibleItems.length === 0) return null;
+            return (
+              <div key={si} className={cn(si > 0 && "mt-6")}>
+                {section.title && !isCollapsed && (
+                  <p className="mb-2 px-3 text-2xs font-semibold uppercase tracking-widest text-surface-400 dark:text-surface-500 transition-opacity duration-200">
+                    {section.title}
+                  </p>
+                )}
+                {section.title && isCollapsed && (
+                  <div className="mx-auto mb-2 hidden h-px w-8 bg-surface-200 lg:block dark:bg-surface-700" />
+                )}
+                <div className="space-y-1">
+                  {visibleItems.map(({ to, icon: Icon, label, end }) => (
+                    <NavLink
+                      key={to}
+                      to={to}
+                      end={end}
+                      onClick={onClose}
+                      title={isCollapsed ? label : undefined}
+                      className={({ isActive }) =>
+                        cn(
+                          "group flex items-center rounded-xl text-sm font-medium transition-all duration-150",
+                          isCollapsed
+                            ? "lg:justify-center lg:px-0 lg:py-2.5 px-3 py-2.5"
+                            : "gap-3 px-3 py-2.5",
+                          isActive
+                            ? "bg-brand-50 text-brand-700 shadow-sm dark:bg-brand-950/50 dark:text-brand-400"
+                            : "text-surface-600 hover:bg-surface-50 hover:text-surface-900 dark:text-surface-400 dark:hover:bg-surface-800 dark:hover:text-surface-200",
+                        )
+                      }
                     >
-                      {label}
-                    </span>
-                  </NavLink>
-                ))}
+                      <Icon className="h-5 w-5 shrink-0" />
+                      <span
+                        className={cn(
+                          "transition-all duration-200 whitespace-nowrap",
+                          isCollapsed ? "lg:hidden lg:w-0 lg:opacity-0" : "lg:w-auto lg:opacity-100",
+                        )}
+                      >
+                        {label}
+                      </span>
+                    </NavLink>
+                  ))}
+                </div>
               </div>
-            </div>
-          ))}
+            );
+          })}
         </nav>
 
         {/* ── Footer ───────────────────────────────── */}

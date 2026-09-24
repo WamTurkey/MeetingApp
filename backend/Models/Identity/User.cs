@@ -6,6 +6,7 @@ public class User
     public string Email { get; set; } = null!;
     public string HashedPassword { get; set; } = null!;
     public string FullName { get; set; } = string.Empty;
+    public string Role { get; set; } = "User"; // Admin | CatalogManager | User
     public bool IsActive { get; set; } = true;
     public bool IsSuperuser { get; set; }
     public DateTime CreatedAt { get; set; }

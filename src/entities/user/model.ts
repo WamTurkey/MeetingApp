@@ -1,12 +1,13 @@
 import type { BaseEntity } from "@/shared/types/common";
 
-export type UserRole = "admin" | "manager" | "member";
+export type UserRole = "Admin" | "CatalogManager" | "User";
 
 export interface User extends BaseEntity {
   email: string;
   fullName: string;
   isActive: boolean;
   isSuperuser: boolean;
+  role: UserRole;
 }
 
 export interface AuthToken {

@@ -47,9 +47,14 @@ export function Header({ onMenuToggle }: HeaderProps) {
         {user && (
           <div className="flex items-center gap-2 ml-1">
             <ParticipantAvatar name={user.fullName} size="sm" />
-            <span className="hidden text-sm font-medium text-surface-700 sm:inline dark:text-surface-300">
-              {user.fullName}
-            </span>
+            <div className="hidden sm:flex flex-col items-end">
+              <span className="text-sm font-medium text-surface-700 dark:text-surface-300">
+                {user.fullName}
+              </span>
+              <span className="text-2xs text-surface-400">
+                {user.role === "Admin" ? "Sistem Yöneticisi" : user.role === "CatalogManager" ? "Katalog Yöneticisi" : "Kullanıcı"}
+              </span>
+            </div>
             <LogoutButton onLogout={logout} compact />
           </div>
         )}
