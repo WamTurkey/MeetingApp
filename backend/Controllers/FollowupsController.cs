@@ -248,6 +248,10 @@ public class FollowupsController : ControllerBase
     private async Task<FollowupItemDto?> GetByIdInternal(int id)
     {
         var result = await GetById(id);
+        if (result.Result is OkObjectResult okResult && okResult.Value is FollowupItemDto dto)
+        {
+            return dto;
+        }
         return result.Value;
     }
 }

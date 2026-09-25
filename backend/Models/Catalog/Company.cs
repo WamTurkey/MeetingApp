@@ -7,6 +7,7 @@ public class Company : AuditableEntity
     public int Id { get; set; }
     public string Name { get; set; } = null!;
     public string? ShortName { get; set; }
+    public string FirmType { get; set; } = "EXTERNAL";
     public bool IsActive { get; set; } = true;
 
     // Navigation — Audit

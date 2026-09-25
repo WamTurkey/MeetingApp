@@ -152,6 +152,8 @@ export function FollowupDetailModal({
   function handleSave() {
     if (!item) return;
     onUpdate?.(item.id, {
+      text: item.text,
+      topicId: item.topicId,
       actionStatus: status,
       dueDate: dueDate || null,
       completedOn: completedOn || null,
@@ -165,8 +167,7 @@ export function FollowupDetailModal({
   }
 
   // Derived display data
-  const CLOSED_STATUSES = ["DONE", "CANCELLED", "ROLLED_OVER"];
-  const depTasks = meetingTasks.filter(t => dependencyItemIds.includes(t.id) && !CLOSED_STATUSES.includes(t.actionStatus));
+  const depTasks = meetingTasks.filter(t => dependencyItemIds.includes(t.id));
   const responsiblePersonDisplay = persons.find(p => p.id === responsiblePersonId)?.fullName || item.responsiblePersonName || "Seçilmedi";
   const responsibleCompanyDisplay = companies.find(c => c.id === responsibleCompanyId)?.name || item.responsibleCompanyName || "Seçilmedi (Kişiye bağlı)";
 
@@ -223,6 +224,22 @@ export function FollowupDetailModal({
             
             {/* Subject text */}
             <div className="rounded-lg border border-surface-200 bg-surface-50/50 p-4 dark:border-surface-700 dark:bg-surface-800/50">
+              {item.sourceMeetingId && (
+                <button
+                  onClick={() => {
+                    onClose();
+                    window.location.href = `/meetings/${item.sourceMeetingId}`;
+                  }}
+                  className="group flex items-center gap-1.5 text-xs font-medium text-brand-600 hover:text-brand-700 dark:text-brand-400 dark:hover:text-brand-300 mb-2 transition-colors cursor-pointer"
+                >
+                  <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                    <path strokeLinecap="round" strokeLinejoin="round" d="M13.828 10.172a4 4 0 00-5.656 0l-4 4a4 4 0 105.656 5.656l1.102-1.101m-.758-4.899a4 4 0 005.656 0l4-4a4 4 0 00-5.656-5.656l-1.1 1.1" />
+                  </svg>
+                  <span className="underline decoration-brand-600/30 group-hover:decoration-brand-600/100 underline-offset-2">
+                    {item.sourceMeetingTitle || `Toplantı #${item.sourceMeetingId}`}
+                  </span>
+                </button>
+              )}
               <p className="text-sm font-medium text-surface-900 dark:text-surface-50 leading-relaxed">
                 {item.text}
               </p>
@@ -281,9 +298,20 @@ export function FollowupDetailModal({
                     onChange={(e) => setResponsibleCompanyId(e.target.value === "" ? "" : Number(e.target.value))}
                   >
                     <option value="">Seçiniz...</option>
-                    {companies.map(c => (
-                      <option key={c.id} value={c.id}>{c.name}</option>
-                    ))}
+                    {companies.some(c => c.firmType === "INTERNAL") && (
+                      <optgroup label="İç Ekip">
+                        {companies.filter(c => c.firmType === "INTERNAL").map(c => (
+                          <option key={c.id} value={c.id}>{c.name}</option>
+                        ))}
+                      </optgroup>
+                    )}
+                    {companies.some(c => c.firmType === "EXTERNAL" || !c.firmType) && (
+                      <optgroup label="Dış Katılımcı">
+                        {companies.filter(c => c.firmType === "EXTERNAL" || !c.firmType).map(c => (
+                          <option key={c.id} value={c.id}>{c.name}</option>
+                        ))}
+                      </optgroup>
+                    )}
                   </select>
                 </div>
               )}
@@ -378,12 +406,32 @@ export function FollowupDetailModal({
                     <p className="text-xs text-surface-400 mb-1">Önce bitmesi gerekenler (Bağımlılıklar)</p>
                     {depTasks.length > 0 ? (
                       <div className="flex flex-wrap gap-2 mt-2">
-                        {depTasks.map(t => (
-                          <div key={t.id} className="flex items-center gap-2 bg-white dark:bg-surface-900 border border-surface-200 dark:border-surface-700 rounded p-2 shadow-sm text-sm">
-                            <span className={cn("w-2 h-2 rounded-full", t.actionStatus === "DONE" || t.actionStatus === "CANCELLED" || t.actionStatus === "ROLLED_OVER" ? "bg-success-500" : "bg-warning-500")}></span>
-                            <span className="truncate max-w-[200px]" title={t.text}>{t.text}</span>
-                          </div>
-                        ))}
+                        {depTasks.map(t => {
+                          let colorClass = "bg-white dark:bg-surface-900 border-surface-200 dark:border-surface-700 text-surface-900 dark:text-surface-50";
+                          let dotClass = "bg-surface-400";
+                          if (t.actionStatus === "DONE" || t.actionStatus === "COMPLETED") {
+                            colorClass = "bg-success-50 dark:bg-success-900/20 border-success-200 dark:border-success-800 text-success-800 dark:text-success-300";
+                            dotClass = "bg-success-500";
+                          } else if (t.actionStatus === "CANCELLED") {
+                            colorClass = "bg-danger-50 dark:bg-danger-900/20 border-danger-200 dark:border-danger-800 text-danger-800 dark:text-danger-300";
+                            dotClass = "bg-danger-500";
+                          } else if (t.actionStatus === "IN_PROGRESS") {
+                            colorClass = "bg-warning-50 dark:bg-warning-900/20 border-warning-200 dark:border-warning-800 text-warning-800 dark:text-warning-300";
+                            dotClass = "bg-warning-500";
+                          } else if (t.actionStatus === "OPEN") {
+                            colorClass = "bg-white dark:bg-surface-900 border-brand-200 dark:border-brand-800 text-brand-800 dark:text-brand-300";
+                            dotClass = "bg-brand-500";
+                          }
+                          return (
+                            <div key={t.id} className={cn("flex items-center gap-2 border rounded p-2 shadow-sm text-sm", colorClass)}>
+                              <span className={cn("w-2 h-2 rounded-full shrink-0", dotClass)}></span>
+                              <span className="truncate max-w-[200px]" title={t.text}>{t.text}</span>
+                              <span className="text-[10px] font-bold uppercase ml-1 opacity-70 shrink-0">
+                                {t.actionStatusDisplay || t.actionStatus}
+                              </span>
+                            </div>
+                          );
+                        })}
                       </div>
                     ) : (
                       <p className="text-sm font-medium text-surface-900 dark:text-surface-50">
@@ -404,11 +452,18 @@ export function FollowupDetailModal({
                       setDependencyItemIds(selectedOptions);
                     }}
                   >
-                    {meetingTasks.map(t => (
-                      <option key={t.id} value={t.id} className="py-1 border-b border-surface-100 last:border-0 truncate">
-                        [{t.actionStatusDisplay}] {t.text}
-                      </option>
-                    ))}
+                    {meetingTasks.map(t => {
+                      let optionColor = "text-surface-900 dark:text-surface-50";
+                      if (t.actionStatus === "DONE" || t.actionStatus === "COMPLETED") optionColor = "text-success-600 dark:text-success-400 font-semibold";
+                      else if (t.actionStatus === "CANCELLED") optionColor = "text-danger-600 dark:text-danger-400";
+                      else if (t.actionStatus === "IN_PROGRESS") optionColor = "text-warning-600 dark:text-warning-400";
+                      else if (t.actionStatus === "OPEN") optionColor = "text-brand-600 dark:text-brand-400";
+                      return (
+                        <option key={t.id} value={t.id} className={cn("py-1 border-b border-surface-100 last:border-0 truncate", optionColor)}>
+                          [{t.actionStatusDisplay}] {t.text}
+                        </option>
+                      );
+                    })}
                   </select>
                   <p className="text-[11px] text-surface-400">Çoklu seçim yapmak için Ctrl (Windows) veya Cmd (Mac) tuşuna basılı tutarak tıklayın.</p>
                 </div>

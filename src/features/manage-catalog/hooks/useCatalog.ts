@@ -10,7 +10,8 @@ import {
   fetchCompanies, fetchProjects, fetchLocations, fetchCategories,
   createCompany, createProject, createLocation, createCategory,
   deleteCompany, deleteProject, deleteLocation, deleteCategory,
-  fetchTitles, createTitle, deleteTitle,
+  updateCompany, updateProject, updateLocation, updateCategory,
+  fetchTitles, createTitle, deleteTitle, updateTitle,
 } from "@/services/catalogService";
 
 export type CatalogKind = "projects" | "companies" | "locations" | "categories" | "titles";
@@ -21,6 +22,7 @@ interface CatalogItem {
   isActive: boolean;
   code?: string | null;
   shortName?: string | null;
+  firmType?: string | null;
 }
 
 const CATALOG_FIELDS: Record<CatalogKind, { label: string; fields: { key: string; label: string; placeholder?: string }[] }> = {
@@ -70,7 +72,7 @@ export function useCatalog(kind: CatalogKind) {
       let data: CatalogItem[];
       switch (kind) {
         case "companies":
-          data = (await fetchCompanies()).map(c => ({ id: c.id, name: c.name, shortName: c.shortName, isActive: c.isActive }));
+          data = (await fetchCompanies()).map(c => ({ id: c.id, name: c.name, shortName: c.shortName, isActive: c.isActive, firmType: c.firmType }));
           break;
         case "projects":
           data = (await fetchProjects()).map(p => ({ id: p.id, name: p.name, code: p.code, isActive: p.isActive }));
@@ -101,13 +103,31 @@ export function useCatalog(kind: CatalogKind) {
     .filter((i) => i.isActive)
     .map((i) => ({ value: i.id, label: i.name }));
 
+  // Grouped company options for ComboBox
+  const companyGroups = kind === "companies"
+    ? [
+        {
+          label: "İç Ekip",
+          options: items
+            .filter(i => i.isActive && (i as any).firmType === "INTERNAL")
+            .map(i => ({ value: i.id, label: i.name })),
+        },
+        {
+          label: "Dış Katılımcı",
+          options: items
+            .filter(i => i.isActive && ((i as any).firmType === "EXTERNAL" || !(i as any).firmType))
+            .map(i => ({ value: i.id, label: i.name })),
+        },
+      ].filter(g => g.options.length > 0)
+    : [];
+
   const create = useCallback(
     async (data: Record<string, string | boolean>) => {
       try {
         let created;
         switch (kind) {
           case "companies":
-            created = await createCompany({ name: data.name as string, shortName: data.shortName as string });
+            created = await createCompany({ name: data.name as string, shortName: data.shortName as string, firmType: (data.firmType as "INTERNAL" | "EXTERNAL") || "EXTERNAL" });
             break;
           case "projects":
             created = await createProject({ name: data.name as string, code: data.code as string });
@@ -126,6 +146,37 @@ export function useCatalog(kind: CatalogKind) {
         return created;
       } catch (err) {
         console.error(`[useCatalog:${kind}] Create Error:`, err);
+        throw err;
+      }
+    },
+    [kind, load],
+  );
+
+  const update = useCallback(
+    async (id: number, data: Record<string, string | boolean>) => {
+      try {
+        let updated;
+        switch (kind) {
+          case "companies":
+            updated = await updateCompany(id, { name: data.name as string, shortName: data.shortName as string, firmType: (data.firmType as "INTERNAL" | "EXTERNAL") || "EXTERNAL", isActive: data.isActive !== false });
+            break;
+          case "projects":
+            updated = await updateProject(id, { name: data.name as string, code: data.code as string, isActive: data.isActive !== false });
+            break;
+          case "locations":
+            updated = await updateLocation(id, { name: data.name as string, isActive: data.isActive !== false });
+            break;
+          case "categories":
+            updated = await updateCategory(id, { name: data.name as string, isActive: data.isActive !== false });
+            break;
+          case "titles":
+            updated = await updateTitle(id, { name: data.name as string, isActive: data.isActive !== false });
+            break;
+        }
+        await load();
+        return updated;
+      } catch (err) {
+        console.error(`[useCatalog:${kind}] Update Error:`, err);
         throw err;
       }
     },
@@ -153,10 +204,12 @@ export function useCatalog(kind: CatalogKind) {
   return {
     items,
     options,
+    companyGroups,
     fields: config.fields,
     label: config.label,
     isLoading,
     create,
+    update,
     remove,
     refetch: load,
   };

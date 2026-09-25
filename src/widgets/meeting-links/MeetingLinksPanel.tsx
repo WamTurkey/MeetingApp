@@ -94,7 +94,7 @@ export function MeetingLinksPanel({ meeting, onRefresh }: MeetingLinksPanelProps
     setIsDeleting(linkId);
     try {
       await deleteMeetingLink(meeting.id, linkId);
-      toast.success("Bağlantı başarıyla silindi.");
+      toast.error("Bağlantı başarıyla silindi.");
       if (onRefresh) onRefresh();
     } catch (error) {
       toast.error("Bağlantı silinirken bir hata oluştu.");

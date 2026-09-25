@@ -267,6 +267,7 @@ export function CreateMeetingModal({
                     value={field.value}
                     onChange={field.onChange}
                     options={companies.options}
+                    groups={companies.companyGroups.length > 0 ? companies.companyGroups : undefined}
                     placeholder="Firma seçin"
                     onAddNew={() => setActiveCatalog("companies")}
                     addNewLabel="Firma"
@@ -375,14 +376,7 @@ export function CreateMeetingModal({
                           />
                         )}
                       />
-                      <div className="sm:col-span-2">
-                        <Input
-                          label="Sonraki Toplantı Notu"
-                          placeholder="Örn: Revize teklifler değerlendirilecek..."
-                          {...register("nextMeetingNote")}
-                          disabled={isLoading}
-                        />
-                      </div>
+
                     </div>
                   )}
                 </div>

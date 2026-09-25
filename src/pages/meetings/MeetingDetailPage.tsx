@@ -24,7 +24,7 @@ import {
   fetchMeetingById,
   updateMeeting,
   deleteMeeting,
-  addNote,
+  addNote, updateNote,
   deleteNote as apiDeleteNote,
   addParticipant,
   removeParticipant,
@@ -100,9 +100,9 @@ export function MeetingDetailPage() {
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
-  const load = useCallback(async () => {
+  const load = useCallback(async (silent = false) => {
     try {
-      setIsLoading(true);
+      if (!silent) setIsLoading(true);
       setError(null);
       const detail = await fetchMeetingById(meetingId);
       setMeeting(toMeeting(detail));
@@ -110,9 +110,9 @@ export function MeetingDetailPage() {
       setParticipants(detail.participants.map(toParticipant));
     } catch (err) {
       console.error("[MeetingDetailPage] Load error:", err);
-      setError("Toplantı yüklenirken hata oluştu.");
+      if (!silent) setError("Toplantı yüklenirken hata oluştu.");
     } finally {
-      setIsLoading(false);
+      if (!silent) setIsLoading(false);
     }
   }, [meetingId]);
 
@@ -142,21 +142,21 @@ export function MeetingDetailPage() {
       await updateMeeting(meetingId, data);
       setShowEdit(false);
       toast.success("Toplantı güncellendi");
-      await load();
+      await load(true);
     } catch (err) { console.error("[MeetingDetail] Edit error:", err); toast.error("Toplantı güncellenemedi"); }
   }
 
   async function handleStart() {
     try {
       await updateMeeting(meetingId, { ...meeting!, status: "ACTIVE" } as any);
-      await load();
+      await load(true);
     } catch (err) { console.error("[MeetingDetail] Start error:", err); }
   }
 
   async function handleEnd() {
     try {
       await updateMeeting(meetingId, { ...meeting!, status: "COMPLETED" } as any);
-      await load();
+      await load(true);
     } catch (err) { console.error("[MeetingDetail] End error:", err); }
   }
 
@@ -165,14 +165,14 @@ export function MeetingDetailPage() {
     try {
       await updateMeeting(meetingId, { ...meeting!, status: newStatus } as any);
       toast.success("Toplantı durumu güncellendi");
-      await load();
+      await load(true);
     } catch (err) { console.error("[MeetingDetail] Status update error:", err); toast.error("Durum güncellenemedi"); }
   }
 
   async function handleDelete() {
     try {
       await deleteMeeting(meetingId);
-      toast.success("Toplantı silindi");
+      toast.error("Toplantı silindi");
       navigate("/meetings");
     } catch (err) { console.error("[MeetingDetail] Delete error:", err); toast.error("Toplantı silinemedi"); }
   }
@@ -190,7 +190,7 @@ export function MeetingDetailPage() {
     } catch (err) {
       console.error("[MeetingDetail] Reorder error:", err);
       toast.error("Sıralama güncellenemedi");
-      await load();
+      await load(true);
     }
   }
 
@@ -205,15 +205,25 @@ export function MeetingDetailPage() {
         actionStatus: data.actionStatus,
       });
       toast.success("Not başarıyla eklendi");
-      await load();
+      await load(true);
     } catch (err) { console.error("[MeetingDetail] AddNote error:", err); toast.error("Not eklenemedi"); }
+  }
+
+  async function handleUpdateNote(noteId: number, data: Partial<NoteCreatePayload>) {
+    try {
+      await updateNote(meetingId, noteId, data as any);
+      await load(true);
+    } catch (err) {
+      console.error("[MeetingDetail] UpdateNote error:", err);
+      toast.error("Not güncellenemedi");
+    }
   }
 
   async function handleDeleteNote(noteId: number) {
     try {
       await apiDeleteNote(meetingId, noteId);
       setNotes((prev) => prev.filter((n) => n.id !== noteId));
-      toast.success("Not silindi");
+      toast.error("Not silindi");
     } catch (err) { console.error("[MeetingDetail] DeleteNote error:", err); toast.error("Not silinemedi"); }
   }
 
@@ -221,7 +231,7 @@ export function MeetingDetailPage() {
     try {
       await Promise.all(dataArray.map(data => addParticipant(meetingId, { personId: data.personId, role: data.role })));
       toast.success(`${dataArray.length} katılımcı eklendi`);
-      await load();
+      await load(true);
     } catch (err) { console.error("[MeetingDetail] AddParticipant error:", err); toast.error("Katılımcılar eklenemedi"); }
   }
 
@@ -299,12 +309,12 @@ export function MeetingDetailPage() {
 
       {/* Tab content */}
       {activeTab === "notes" && (
-        <NotesPanel notes={notes} meetingId={meetingId} editable={editable} onAddNote={handleAddNote} onDeleteNote={handleDeleteNote} onReorderNotes={handleReorderNotes} />
+        <NotesPanel notes={notes} meetingId={meetingId} editable={editable} onAddNote={handleAddNote} onUpdateNote={handleUpdateNote} onDeleteNote={handleDeleteNote} onReorderNotes={handleReorderNotes} />
       )}
       {activeTab === "participants" && (
         <ParticipantsPanel participants={participants} meetingId={meetingId} editable={editable} onAddMultiple={handleAddParticipants} onRemove={handleRemoveParticipant} onToggleAttendance={handleToggleAttendance} />
       )}
-      {activeTab === "links" && <MeetingLinksPanel meeting={meeting} onRefresh={load} />}
+      {activeTab === "links" && <MeetingLinksPanel meeting={meeting} onRefresh={() => load(true)} />}
       {activeTab === "info" && (
         <Card><CardContent className="space-y-4">
           {[
@@ -313,7 +323,6 @@ export function MeetingDetailPage() {
             ["Başlangıç", meeting.startedAt ? new Date(meeting.startedAt).toLocaleString("tr-TR") : "Henüz başlamadı"],
             ["Bitiş", meeting.endedAt ? new Date(meeting.endedAt).toLocaleString("tr-TR") : "Henüz bitmedi"],
             ["Sonraki Toplantı", meeting.nextMeetingAt ? new Date(meeting.nextMeetingAt).toLocaleString("tr-TR") : "Belirtilmedi"],
-            ["Sonraki Toplantı Notu", meeting.nextMeetingNote ?? "—"],
           ].map(([label, value]) => (
             <div key={label}>
               <p className="text-xs font-semibold uppercase tracking-wider text-surface-400">{label}</p>
@@ -330,7 +339,7 @@ export function MeetingDetailPage() {
           <Link to={`/meetings/${meetingId}/minutes`}><Button variant="primary" className="mt-4">Önizlemeye Git</Button></Link>
         </CardContent></Card>
       )}
-      {activeTab === "prep" && <MeetingPrepPanel meetingId={meetingId} onRefresh={load} />}
+      {activeTab === "prep" && <MeetingPrepPanel meetingId={meetingId} onRefresh={() => load(true)} />}
 
       {/* Edit modal */}
       <Modal isOpen={showEdit} onClose={() => setShowEdit(false)} title="Toplantıyı Düzenle" size="lg">

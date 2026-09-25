@@ -62,17 +62,20 @@ export interface CompanyDto {
   name: string;
   shortName: string | null;
   isActive: boolean;
+  firmType: "INTERNAL" | "EXTERNAL";
 }
 
 export interface CreateCompanyRequest {
   name: string;
   shortName?: string;
+  firmType?: "INTERNAL" | "EXTERNAL";
 }
 
 export interface UpdateCompanyRequest {
   name: string;
   shortName?: string;
   isActive: boolean;
+  firmType: "INTERNAL" | "EXTERNAL";
 }
 
 // ──────────── Project ────────────

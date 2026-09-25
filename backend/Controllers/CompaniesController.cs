@@ -18,7 +18,7 @@ public class CompaniesController : ControllerBase
     {
         var items = await _db.Companies
             .OrderBy(c => c.Name)
-            .Select(c => new CompanyDto(c.Id, c.Name, c.ShortName, c.IsActive))
+            .Select(c => new CompanyDto(c.Id, c.Name, c.ShortName, c.IsActive, c.FirmType))
             .ToListAsync();
         return Ok(items);
     }
@@ -28,17 +28,17 @@ public class CompaniesController : ControllerBase
     {
         var c = await _db.Companies.FindAsync(id);
         if (c == null) return NotFound();
-        return Ok(new CompanyDto(c.Id, c.Name, c.ShortName, c.IsActive));
+        return Ok(new CompanyDto(c.Id, c.Name, c.ShortName, c.IsActive, c.FirmType));
     }
 
     [HttpPost]
     public async Task<ActionResult<CompanyDto>> Create([FromBody] CreateCompanyDto dto)
     {
-        var company = new Company { Name = dto.Name, ShortName = dto.ShortName, CreatedBy = 1 };
+        var company = new Company { Name = dto.Name, ShortName = dto.ShortName, FirmType = dto.FirmType, CreatedBy = 1 };
         _db.Companies.Add(company);
         await _db.SaveChangesAsync();
         return CreatedAtAction(nameof(GetById), new { id = company.Id },
-            new CompanyDto(company.Id, company.Name, company.ShortName, company.IsActive));
+            new CompanyDto(company.Id, company.Name, company.ShortName, company.IsActive, company.FirmType));
     }
 
     [HttpPut("{id}")]
@@ -49,10 +49,11 @@ public class CompaniesController : ControllerBase
         c.Name = dto.Name;
         c.ShortName = dto.ShortName;
         c.IsActive = dto.IsActive;
+        c.FirmType = dto.FirmType;
         c.UpdatedBy = 1;
         c.UpdatedAt = DateTime.UtcNow;
         await _db.SaveChangesAsync();
-        return Ok(new CompanyDto(c.Id, c.Name, c.ShortName, c.IsActive));
+        return Ok(new CompanyDto(c.Id, c.Name, c.ShortName, c.IsActive, c.FirmType));
     }
 
     [HttpDelete("{id}")]

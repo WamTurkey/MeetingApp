@@ -116,7 +116,11 @@ export function FollowupsPage() {
 
   async function handleUpdate(id: number, updates: Partial<FollowupItem>) {
     try {
-      await updateFollowup(id, updates as any);
+      const updatedItem = await updateFollowup(id, updates as any);
+      setFollowups((prev) => prev.map((f) => (f.id === id ? (updatedItem as unknown as FollowupItem) : f)));
+      if (selectedItem?.id === id) {
+        setSelectedItem(updatedItem as unknown as FollowupItem);
+      }
       await loadFollowups();
     } catch (err) {
       console.error("[FollowupsPage] Update error:", err);
@@ -124,6 +128,9 @@ export function FollowupsPage() {
       setFollowups((prev) =>
         prev.map((f) => (f.id === id ? { ...f, ...updates } : f))
       );
+      if (selectedItem?.id === id) {
+        setSelectedItem((prev) => prev ? { ...prev, ...updates } : null);
+      }
     }
   }
 

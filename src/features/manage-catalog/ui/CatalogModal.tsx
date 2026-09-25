@@ -1,17 +1,18 @@
 /**
  * CatalogModal — nested modal for managing catalog definitions.
  *
- * Shows a form to add new items + a table of existing items below.
+ * Shows a form to add/edit items + a table of existing items below.
  * When a new item is created, calls `onCreated(id)` so the parent
  * form's dropdown auto-selects the new entry.
  */
-import { useState, type FormEvent } from "react";
-import { Plus, Trash2 } from "lucide-react";
+import { useState, useEffect, type FormEvent } from "react";
+import { Plus, Trash2, Pencil, X } from "lucide-react";
 import { Modal } from "@/shared/ui/Modal";
 import { Button } from "@/shared/ui/Button";
 import { toast } from "sonner";
 import { Input } from "@/shared/ui/Input";
 import { Checkbox } from "@/shared/ui/Checkbox";
+import { Select } from "@/shared/ui/Select";
 import { useCatalog, type CatalogKind } from "../hooks/useCatalog";
 
 export interface CatalogModalProps {
@@ -22,6 +23,8 @@ export interface CatalogModalProps {
   onCreated?: (id: number) => void;
   /** Called after any deletion */
   onDeleted?: () => void;
+  /** If provided, the modal opens in edit mode for this item */
+  editingItemId?: number | null;
 }
 
 export function CatalogModal({
@@ -30,16 +33,45 @@ export function CatalogModal({
   kind,
   onCreated,
   onDeleted,
+  editingItemId,
 }: CatalogModalProps) {
-  const { items, fields, label, create, remove } = useCatalog(kind);
+  const { items, fields, label, create, update, remove } = useCatalog(kind);
   const [formData, setFormData] = useState<Record<string, string>>({});
   const [active, setActive] = useState(true);
+  const [firmType, setFirmType] = useState<"INTERNAL" | "EXTERNAL">("EXTERNAL");
   const [error, setError] = useState("");
+  const [editId, setEditId] = useState<number | null>(null);
+
+  // When editingItemId changes (e.g. from CatalogPage), populate the form
+  useEffect(() => {
+    if (editingItemId && isOpen) {
+      const item = items.find(i => i.id === editingItemId);
+      if (item) {
+        startEditing(item);
+      }
+    }
+  }, [editingItemId, isOpen, items]);
+
+  function startEditing(item: any) {
+    setEditId(item.id);
+    const data: Record<string, string> = {};
+    for (const field of fields) {
+      data[field.key] = (item as any)[field.key] ?? "";
+    }
+    setFormData(data);
+    setActive(item.isActive ?? true);
+    if (kind === "companies") {
+      setFirmType((item as any).firmType || "EXTERNAL");
+    }
+    setError("");
+  }
 
   function resetForm() {
     setFormData({});
     setActive(true);
+    setFirmType("EXTERNAL");
     setError("");
+    setEditId(null);
   }
 
   async function handleSubmit(e: FormEvent) {
@@ -50,9 +82,21 @@ export function CatalogModal({
       return;
     }
     try {
-      const newItem = await create({ ...formData, active });
-      toast.success("Kayıt başarıyla oluşturuldu");
-      if (newItem && typeof newItem === "object" && "id" in newItem) onCreated?.((newItem as any).id);
+      const payload: Record<string, string | boolean> = { ...formData, isActive: active };
+      if (kind === "companies") payload.firmType = firmType;
+
+      if (editId) {
+        // UPDATE mode
+        await update(editId, payload);
+        toast.success("Kayıt başarıyla güncellendi");
+        onCreated?.(editId);
+      } else {
+        // CREATE mode
+        payload.active = active;
+        const newItem = await create(payload);
+        toast.success("Kayıt başarıyla oluşturuldu");
+        if (newItem && typeof newItem === "object" && "id" in newItem) onCreated?.((newItem as any).id);
+      }
       resetForm();
     } catch (err: any) {
       toast.error("Kaydedilirken bir hata oluştu");
@@ -63,20 +107,32 @@ export function CatalogModal({
   return (
     <Modal
       isOpen={isOpen}
-      onClose={onClose}
+      onClose={() => { resetForm(); onClose(); }}
       title={`${label} Yönetimi`}
       description={`Yeni ${label.toLowerCase()} ekleyin veya mevcut kayıtları yönetin.`}
       size="xl"
     >
       <div className="space-y-6">
-        {/* ── Add Form ────────────────────────────── */}
+        {/* ── Add / Edit Form ────────────────────────────── */}
         <form
           onSubmit={handleSubmit}
           className="rounded-xl border border-surface-200 bg-surface-50 p-4 dark:border-surface-700 dark:bg-surface-900/50"
         >
-          <h3 className="mb-3 text-sm font-semibold text-surface-700 dark:text-surface-300">
-            <Plus className="mr-1.5 inline-block h-4 w-4" />
-            Yeni {label} Ekle
+          <h3 className="mb-3 flex items-center justify-between text-sm font-semibold text-surface-700 dark:text-surface-300">
+            <span className="flex items-center gap-1.5">
+              {editId ? <Pencil className="h-4 w-4 text-brand-500" /> : <Plus className="h-4 w-4" />}
+              {editId ? `${label} Düzenle` : `Yeni ${label} Ekle`}
+            </span>
+            {editId && (
+              <button
+                type="button"
+                onClick={resetForm}
+                className="rounded-md p-1 text-surface-400 transition-colors hover:bg-surface-200 hover:text-surface-600 dark:hover:bg-surface-700"
+                title="Düzenlemeyi İptal Et"
+              >
+                <X className="h-4 w-4" />
+              </button>
+            )}
           </h3>
           <div className="grid gap-3 sm:grid-cols-2">
             {fields.map((field) => (
@@ -94,6 +150,19 @@ export function CatalogModal({
               />
             ))}
           </div>
+          {kind === "companies" && (
+            <div className="mt-3">
+              <Select
+                label="Firma Tipi"
+                options={[
+                  { value: "EXTERNAL", label: "🤝 Dış Katılımcı" },
+                  { value: "INTERNAL", label: "🏢 İç Ekip" },
+                ]}
+                value={firmType}
+                onChange={(e) => setFirmType(e.target.value as "INTERNAL" | "EXTERNAL")}
+              />
+            </div>
+          )}
           <div className="mt-3 flex items-center justify-between">
             <Checkbox
               label="Aktif kayıtlarda göster"
@@ -104,9 +173,9 @@ export function CatalogModal({
               type="submit"
               variant="primary"
               size="sm"
-              icon={<Plus className="h-4 w-4" />}
+              icon={editId ? <Pencil className="h-4 w-4" /> : <Plus className="h-4 w-4" />}
             >
-              Kaydet
+              {editId ? "Güncelle" : "Kaydet"}
             </Button>
           </div>
           {error && (
@@ -150,7 +219,7 @@ export function CatalogModal({
                   {items.map((item) => (
                     <tr
                       key={item.id}
-                      className="bg-white dark:bg-surface-800"
+                      className={`bg-white dark:bg-surface-800 ${editId === item.id ? "ring-2 ring-brand-500/30 bg-brand-50/30 dark:bg-brand-900/10" : ""}`}
                     >
                       <td className="px-3 py-2 text-surface-900 dark:text-surface-100">
                         {item.name}
@@ -172,17 +241,27 @@ export function CatalogModal({
                         </span>
                       </td>
                       <td className="px-3 py-2 text-right">
-                        <button
-                          type="button"
-                          onClick={async () => {
-                            await remove(item.id);
-                            onDeleted?.();
-                          }}
-                          className="rounded-md p-1 text-surface-400 transition-colors hover:bg-danger-50 hover:text-danger-600 dark:hover:bg-danger-900/20"
-                          title="Sil"
-                        >
-                          <Trash2 className="h-4 w-4" />
-                        </button>
+                        <div className="flex items-center justify-end gap-1">
+                          <button
+                            type="button"
+                            onClick={() => startEditing(item)}
+                            className="rounded-md p-1 text-surface-400 transition-colors hover:bg-brand-50 hover:text-brand-600 dark:hover:bg-brand-900/20"
+                            title="Düzenle"
+                          >
+                            <Pencil className="h-4 w-4" />
+                          </button>
+                          <button
+                            type="button"
+                            onClick={async () => {
+                              await remove(item.id);
+                              onDeleted?.();
+                            }}
+                            className="rounded-md p-1 text-surface-400 transition-colors hover:bg-danger-50 hover:text-danger-600 dark:hover:bg-danger-900/20"
+                            title="Sil"
+                          >
+                            <Trash2 className="h-4 w-4" />
+                          </button>
+                        </div>
                       </td>
                     </tr>
                   ))}

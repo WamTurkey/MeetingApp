@@ -77,14 +77,22 @@ export function AddParticipantForm({
     [existingParticipants],
   );
 
-  // Company filter options
-  const companyFilterOptions: SelectOption[] = useMemo(
-    () => [
+  // Company filter options — grouped by firm type
+  const companyFilterOptions: SelectOption[] = useMemo(() => {
+    const internalFirms = companies
+      .filter(c => c.firmType === "INTERNAL")
+      .map(c => ({ value: String(c.id), label: `🏢 ${c.name}` }));
+    const externalFirms = companies
+      .filter(c => c.firmType === "EXTERNAL" || !c.firmType)
+      .map(c => ({ value: String(c.id), label: c.name }));
+
+    return [
       { value: "", label: "Tüm Firmalar" },
-      ...companies.map(c => ({ value: String(c.id), label: c.name })),
-    ],
-    [companies],
-  );
+      // We can't use optgroup in native select, so prefix internal with emoji
+      ...(internalFirms.length > 0 ? [{ value: "__header_internal__", label: "── İç Ekip ──", disabled: true }, ...internalFirms] : []),
+      ...(externalFirms.length > 0 ? [{ value: "__header_external__", label: "── Dış Katılımcı ──", disabled: true }, ...externalFirms] : []),
+    ];
+  }, [companies]);
 
   // ComboBox options — filtered by selected company
   const personOptions: ComboBoxOption[] = useMemo(

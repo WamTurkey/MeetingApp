@@ -1,3 +1,7 @@
+using QuestPDF.Fluent;
+using QuestPDF.Helpers;
+using QuestPDF.Infrastructure;
+using MeetingApp.API.Models;
 using MeetingApp.API.Services;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.EntityFrameworkCore;
@@ -502,7 +506,7 @@ public class MeetingsController : ControllerBase
     [HttpPost("{id}/rollover-items")]
     public async Task<ActionResult> RolloverItems(int id, [FromBody] List<int> itemIds)
     {
-        var currentUserId = int.Parse(User.FindFirst(System.Security.Claims.ClaimTypes.NameIdentifier)?.Value ?? "0");
+        var currentUserId = int.Parse(User.FindFirst(System.Security.Claims.ClaimTypes.NameIdentifier)?.Value ?? "1");
 
         var oldItems = await _db.FollowupItems
             .Where(x => itemIds.Contains(x.Id))
@@ -560,9 +564,9 @@ public class MeetingsController : ControllerBase
             ?? (result.Value);
     }
 
-    // ──────────── GET /api/meetings/{id}/export/excel ────────────
-    [HttpGet("{id}/export/excel")]
-    public async Task<IActionResult> ExportToExcel(int id)
+    // ──────────── EXPORTS ────────────
+
+    private async Task<MeetingMinutesExportDto?> GetExportDto(int id)
     {
         var m = await _db.Meetings
             .Include(x => x.Project)
@@ -574,12 +578,53 @@ public class MeetingsController : ControllerBase
             .Include(x => x.Notes).ThenInclude(n => n.ResponsiblePerson)
             .FirstOrDefaultAsync(x => x.Id == id);
 
-        if (m == null) return NotFound();
+        if (m == null) return null;
+
+        var dto = new MeetingMinutesExportDto
+        {
+            MeetingId = m.Id,
+            Title = m.Title ?? string.Empty,
+            Subject = m.Subject ?? string.Empty,
+            MeetingDate = m.MeetingDate,
+            MeetingTime = m.PlannedStart,
+            LocationName = m.Location?.Name ?? "-",
+            ProjectName = m.Project?.Name ?? "-",
+            CategoryName = m.Category?.Name ?? "-",
+            Notes = m.Notes.OrderBy(n => n.DisplayOrder).ToList()
+        };
+
+        dto.InternalParticipants = m.Participants
+            .Where(p => (p.Person?.Company?.FirmType ?? "EXTERNAL") == "INTERNAL")
+            .GroupBy(p => p.Person?.Company?.Name ?? "Belirtilmedi")
+            .Select(g => new InternalParticipantGroupDto
+            {
+                CompanyName = g.Key,
+                ParticipantsText = string.Join(", ", g.Select(x => x.Person?.FullName ?? ""))
+            }).ToList();
+
+        dto.ExternalParticipants = m.Participants
+            .Where(p => (p.Person?.Company?.FirmType ?? "EXTERNAL") == "EXTERNAL")
+            .OrderBy(p => p.Person?.Company?.Name)
+            .ThenBy(p => p.Person?.FullName)
+            .Select(p => new ExternalParticipantDto
+            {
+                CompanyName = p.Person?.Company?.Name ?? "Belirtilmedi",
+                Title = p.RoleNavigation?.DisplayName ?? p.Role ?? string.Empty,
+                FullName = p.Person?.FullName ?? string.Empty
+            }).ToList();
+
+        return dto;
+    }
+
+    [HttpGet("{id}/export/excel")]
+    public async Task<IActionResult> ExportToExcel(int id)
+    {
+        var dto = await GetExportDto(id);
+        if (dto == null) return NotFound();
 
         using var workbook = new XLWorkbook();
         var ws = workbook.Worksheets.Add("Toplantı Tutanağı");
 
-        // 1. Header Section
         ws.Cell("A1").Value = "TOPLANTI TUTANAĞI";
         ws.Range("A1:E1").Merge().Style
             .Font.SetBold().Font.SetFontSize(16)
@@ -587,19 +632,19 @@ public class MeetingsController : ControllerBase
             .Fill.SetBackgroundColor(XLColor.LightGray);
 
         ws.Cell("A2").Value = "Toplantı Konusu:";
-        ws.Cell("B2").Value = m.Title;
+        ws.Cell("B2").Value = dto.Title;
         ws.Range("B2:E2").Merge();
         
         ws.Cell("A3").Value = "Tarih / Saat:";
-        ws.Cell("B3").Value = m.MeetingDate.ToString("dd.MM.yyyy") + (m.PlannedStart.HasValue ? $" / {m.PlannedStart.Value.ToString("HH:mm")}" : "");
+        ws.Cell("B3").Value = dto.MeetingDate?.ToString("dd.MM.yyyy") + (dto.MeetingTime.HasValue ? $" / {dto.MeetingTime.Value.ToString("hh\\:mm")}" : "");
         ws.Range("B3:E3").Merge();
 
         ws.Cell("A4").Value = "Yer:";
-        ws.Cell("B4").Value = m.Location?.Name ?? "-";
+        ws.Cell("B4").Value = dto.LocationName;
         ws.Range("B4:E4").Merge();
 
         ws.Cell("A5").Value = "Proje / Kategori:";
-        ws.Cell("B5").Value = $"{m.Project?.Name ?? "-"} / {m.Category?.Name ?? "-"}";
+        ws.Cell("B5").Value = $"{dto.ProjectName} / {dto.CategoryName}";
         ws.Range("B5:E5").Merge();
 
         ws.Range("A2:E5").Style.Border.OutsideBorder = XLBorderStyleValues.Thin;
@@ -607,32 +652,49 @@ public class MeetingsController : ControllerBase
 
         int row = 7;
 
-        // 2. Participants Section
         ws.Cell(row, 1).Value = "KATILIMCILAR";
         ws.Range(row, 1, row, 5).Merge().Style
             .Font.SetBold().Fill.SetBackgroundColor(XLColor.LightSteelBlue);
         row++;
 
-        ws.Cell(row, 1).Value = "Ad Soyad";
-        ws.Cell(row, 2).Value = "Firma";
-        ws.Cell(row, 3).Value = "Rol";
-        ws.Range(row, 3, row, 5).Merge();
-        ws.Range(row, 1, row, 5).Style.Font.SetBold().Border.SetOutsideBorder(XLBorderStyleValues.Thin).Border.SetInsideBorder(XLBorderStyleValues.Thin);
-        row++;
-
-        foreach (var p in m.Participants)
+        if (dto.InternalParticipants.Any())
         {
-            ws.Cell(row, 1).Value = p.Person.FullName;
-            ws.Cell(row, 2).Value = p.Person.Company?.Name ?? "-";
-            ws.Cell(row, 3).Value = p.RoleNavigation.DisplayName;
+            foreach (var g in dto.InternalParticipants)
+            {
+                ws.Cell(row, 1).Value = g.CompanyName;
+                ws.Cell(row, 1).Style.Font.SetBold(true);
+                
+                ws.Cell(row, 2).Value = g.ParticipantsText;
+                ws.Cell(row, 2).Style.Alignment.SetWrapText(true);
+                
+                ws.Range(row, 2, row, 5).Merge();
+                ws.Range(row, 1, row, 5).Style.Border.SetOutsideBorder(XLBorderStyleValues.Thin).Border.SetInsideBorder(XLBorderStyleValues.Thin);
+                row++;
+            }
+        }
+
+        if (dto.ExternalParticipants.Any())
+        {
+            ws.Cell(row, 1).Value = "Firma";
+            ws.Cell(row, 2).Value = "Ünvan";
+            ws.Cell(row, 3).Value = "Ad Soyad";
             ws.Range(row, 3, row, 5).Merge();
-            ws.Range(row, 1, row, 5).Style.Border.SetOutsideBorder(XLBorderStyleValues.Thin).Border.SetInsideBorder(XLBorderStyleValues.Thin);
+            ws.Range(row, 1, row, 5).Style.Font.SetBold().Fill.SetBackgroundColor(XLColor.WhiteSmoke).Border.SetOutsideBorder(XLBorderStyleValues.Thin).Border.SetInsideBorder(XLBorderStyleValues.Thin);
             row++;
+
+            foreach (var p in dto.ExternalParticipants)
+            {
+                ws.Cell(row, 1).Value = p.CompanyName;
+                ws.Cell(row, 2).Value = p.Title;
+                ws.Cell(row, 3).Value = p.FullName;
+                ws.Range(row, 3, row, 5).Merge();
+                ws.Range(row, 1, row, 5).Style.Border.SetOutsideBorder(XLBorderStyleValues.Thin).Border.SetInsideBorder(XLBorderStyleValues.Thin);
+                row++;
+            }
         }
 
         row++;
 
-        // 3. Meeting Items (Notes, Decisions, Tasks)
         ws.Cell(row, 1).Value = "GÜNDEM VE KARARLAR";
         ws.Range(row, 1, row, 5).Merge().Style
             .Font.SetBold().Fill.SetBackgroundColor(XLColor.LightSteelBlue);
@@ -646,17 +708,15 @@ public class MeetingsController : ControllerBase
         ws.Range(row, 1, row, 5).Style.Font.SetBold().Border.SetOutsideBorder(XLBorderStyleValues.Thin).Border.SetInsideBorder(XLBorderStyleValues.Thin);
         row++;
 
-        var sortedNotes = m.Notes.OrderBy(n => n.DisplayOrder).ToList();
         int seq = 1;
-        foreach (var note in sortedNotes)
+        foreach (var note in dto.Notes)
         {
             ws.Cell(row, 1).Value = seq++;
-            ws.Cell(row, 2).Value = note.NoteTypeNavigation.DisplayName;
+            ws.Cell(row, 2).Value = note.NoteTypeNavigation?.DisplayName ?? "-";
             ws.Cell(row, 3).Value = note.Content;
             ws.Cell(row, 4).Value = note.ResponsiblePerson?.FullName ?? "-";
             ws.Cell(row, 5).Value = note.DueDate?.ToString("dd.MM.yyyy") ?? "-";
             
-            // Format Content cell to wrap text
             ws.Cell(row, 3).Style.Alignment.SetWrapText(true);
             
             ws.Range(row, 1, row, 5).Style.Border.SetOutsideBorder(XLBorderStyleValues.Thin).Border.SetInsideBorder(XLBorderStyleValues.Thin);
@@ -665,12 +725,11 @@ public class MeetingsController : ControllerBase
             row++;
         }
 
-        // 4. Columns & Styling
-        ws.Column(1).Width = 8;   // Sırano
-        ws.Column(2).Width = 15;  // Tip / Firma
-        ws.Column(3).Width = 50;  // İçerik / Rol
-        ws.Column(4).Width = 20;  // Sorumlu
-        ws.Column(5).Width = 15;  // Termin
+        ws.Column(1).Width = 8;
+        ws.Column(2).Width = 20;
+        ws.Column(3).Width = 50;
+        ws.Column(4).Width = 20;
+        ws.Column(5).Width = 15;
 
         ws.Style.Font.FontName = "Calibri";
         ws.Style.Font.FontSize = 11;
@@ -679,6 +738,162 @@ public class MeetingsController : ControllerBase
         workbook.SaveAs(stream);
         var content = stream.ToArray();
 
-        return File(content, "application/vnd.openxmlformats-officedocument.spreadsheetxml.sheet", $"Tutanak_{m.Id}_{DateTime.Now:yyyyMMddHHmm}.xlsx");
+        return File(content, "application/vnd.openxmlformats-officedocument.spreadsheetxml.sheet", $"Tutanak_{dto.MeetingId}_{DateTime.Now:yyyyMMddHHmm}.xlsx");
+    }
+
+    [HttpGet("{id}/export/pdf")]
+    public async Task<IActionResult> ExportToPdf(int id)
+    {
+        var dto = await GetExportDto(id);
+        if (dto == null) return NotFound();
+
+        QuestPDF.Settings.License = LicenseType.Community;
+
+        var document = Document.Create(container =>
+        {
+            container.Page(page =>
+            {
+                page.Size(PageSizes.A4);
+                page.Margin(1, Unit.Centimetre);
+                page.PageColor(Colors.White);
+                page.DefaultTextStyle(x => x.FontSize(10).FontFamily("Arial"));
+
+                page.Header().Element(c => ComposeHeader(c, dto));
+                page.Content().Element(c => ComposeContent(c, dto));
+                page.Footer().AlignCenter().Text(x =>
+                {
+                    x.Span("Sayfa ");
+                    x.CurrentPageNumber();
+                    x.Span(" / ");
+                    x.TotalPages();
+                });
+            });
+        });
+
+        var pdfData = document.GeneratePdf();
+        return File(pdfData, "application/pdf", $"Tutanak_{dto.MeetingId}_{DateTime.Now:yyyyMMddHHmm}.pdf");
+    }
+
+    private void ComposeHeader(IContainer container, MeetingMinutesExportDto dto)
+    {
+        container.Row(row =>
+        {
+            row.RelativeItem().Column(col =>
+            {
+                col.Item().Text("TOPLANTI TUTANAĞI").FontSize(18).SemiBold().FontColor(Colors.Blue.Darken2);
+                col.Item().PaddingTop(5).Text(text =>
+                {
+                    text.Span("Konu: ").SemiBold();
+                    text.Span(dto.Title);
+                });
+                col.Item().Text(text =>
+                {
+                    text.Span("Tarih / Saat: ").SemiBold();
+                    text.Span(dto.MeetingDate?.ToString("dd.MM.yyyy") + (dto.MeetingTime.HasValue ? $" / {dto.MeetingTime.Value.ToString("hh\\:mm")}" : ""));
+                });
+                col.Item().Text(text =>
+                {
+                    text.Span("Yer: ").SemiBold();
+                    text.Span(dto.LocationName);
+                });
+            });
+        });
+    }
+
+    private void ComposeContent(IContainer container, MeetingMinutesExportDto dto)
+    {
+        container.PaddingVertical(1, Unit.Centimetre).Column(col =>
+        {
+            col.Spacing(15);
+            
+            // Participants
+            col.Item().Text("KATILIMCILAR").FontSize(12).SemiBold().FontColor(Colors.Grey.Darken3);
+            
+            if (dto.InternalParticipants.Any())
+            {
+                col.Item().Table(table =>
+                {
+                    table.ColumnsDefinition(columns =>
+                    {
+                        columns.RelativeColumn(3);
+                        columns.RelativeColumn(7);
+                    });
+
+                    foreach (var ip in dto.InternalParticipants)
+                    {
+                        table.Cell().Text(ip.CompanyName).SemiBold();
+                        table.Cell().Text(ip.ParticipantsText);
+                    }
+                });
+            }
+
+            if (dto.ExternalParticipants.Any())
+            {
+                col.Item().Table(table =>
+                {
+                    table.ColumnsDefinition(columns =>
+                    {
+                        columns.RelativeColumn(3);
+                        columns.RelativeColumn(3);
+                        columns.RelativeColumn(4);
+                    });
+
+                    table.Header(header =>
+                    {
+                        header.Cell().BorderBottom(1).BorderColor(Colors.Grey.Lighten2).PaddingBottom(5).Text("Firma").SemiBold();
+                        header.Cell().BorderBottom(1).BorderColor(Colors.Grey.Lighten2).PaddingBottom(5).Text("Ünvan").SemiBold();
+                        header.Cell().BorderBottom(1).BorderColor(Colors.Grey.Lighten2).PaddingBottom(5).Text("Ad Soyad").SemiBold();
+                    });
+
+                    int index = 0;
+                    foreach (var ep in dto.ExternalParticipants)
+                    {
+                        var bgColor = index % 2 == 0 ? Colors.White : Colors.Grey.Lighten4;
+                        table.Cell().Background(bgColor).Padding(3).Text(ep.CompanyName);
+                        table.Cell().Background(bgColor).Padding(3).Text(ep.Title);
+                        table.Cell().Background(bgColor).Padding(3).Text(ep.FullName);
+                        index++;
+                    }
+                });
+            }
+
+            // Meeting Items
+            col.Item().PaddingTop(10).Text("GÜNDEM VE KARARLAR").FontSize(12).SemiBold().FontColor(Colors.Grey.Darken3);
+            
+            col.Item().Table(table =>
+            {
+                table.ColumnsDefinition(columns =>
+                {
+                    columns.ConstantColumn(20);
+                    columns.ConstantColumn(50);
+                    columns.RelativeColumn();
+                    columns.ConstantColumn(70);
+                    columns.ConstantColumn(60);
+                });
+
+                table.Header(header =>
+                {
+                    header.Cell().BorderBottom(1).BorderColor(Colors.Grey.Lighten2).PaddingBottom(5).Text("#").SemiBold();
+                    header.Cell().BorderBottom(1).BorderColor(Colors.Grey.Lighten2).PaddingBottom(5).Text("Tip").SemiBold();
+                    header.Cell().BorderBottom(1).BorderColor(Colors.Grey.Lighten2).PaddingBottom(5).Text("İçerik").SemiBold();
+                    header.Cell().BorderBottom(1).BorderColor(Colors.Grey.Lighten2).PaddingBottom(5).Text("Sorumlu").SemiBold();
+                    header.Cell().BorderBottom(1).BorderColor(Colors.Grey.Lighten2).PaddingBottom(5).Text("Termin").SemiBold();
+                });
+
+                int index = 0;
+                int seq = 1;
+                foreach (var note in dto.Notes)
+                {
+                    var bgColor = index % 2 == 0 ? Colors.White : Colors.Grey.Lighten4;
+                    table.Cell().Background(bgColor).Padding(3).Text(seq.ToString());
+                    table.Cell().Background(bgColor).Padding(3).Text(note.NoteTypeNavigation?.DisplayName ?? "-");
+                    table.Cell().Background(bgColor).Padding(3).Text(note.Content);
+                    table.Cell().Background(bgColor).Padding(3).Text(note.ResponsiblePerson?.FullName ?? "-");
+                    table.Cell().Background(bgColor).Padding(3).Text(note.DueDate?.ToString("dd.MM.yyyy") ?? "-");
+                    index++;
+                    seq++;
+                }
+            });
+        });
     }
 }

@@ -25,6 +25,11 @@ export interface ComboBoxOption {
   disabled?: boolean;
 }
 
+export interface ComboBoxGroup {
+  label: string;
+  options: ComboBoxOption[];
+}
+
 export interface ComboBoxProps {
   label?: string;
   value?: number | null;
@@ -37,6 +42,8 @@ export interface ComboBoxProps {
   onAddNew?: () => void;
   addNewLabel?: string;
   className?: string;
+  /** Grouped options — if provided, options prop is ignored */
+  groups?: ComboBoxGroup[];
 }
 
 export function ComboBox({
@@ -50,6 +57,7 @@ export function ComboBox({
   onAddNew,
   addNewLabel = "Yeni Ekle",
   className,
+  groups,
 }: ComboBoxProps) {
   const [open, setOpen] = useState(false);
   const [search, setSearch] = useState("");
@@ -82,13 +90,28 @@ export function ComboBox({
     dismiss,
   ]);
 
-  const filtered = useMemo(() => {
-    if (!search.trim()) return options;
-    const needle = search.toLowerCase();
-    return options.filter((o) => o.label.toLowerCase().includes(needle));
-  }, [options, search]);
+  // Flatten all options (from groups or direct)
+  const allOptions = useMemo(() => {
+    if (groups) return groups.flatMap(g => g.options);
+    return options;
+  }, [groups, options]);
 
-  const selectedLabel = options.find((o) => o.value === value)?.label;
+  const filtered = useMemo(() => {
+    const needle = search.trim().toLowerCase();
+    if (groups) {
+      if (!needle) return groups;
+      return groups
+        .map(g => ({
+          ...g,
+          options: g.options.filter(o => o.label.toLowerCase().includes(needle)),
+        }))
+        .filter(g => g.options.length > 0);
+    }
+    if (!needle) return options;
+    return options.filter((o) => o.label.toLowerCase().includes(needle));
+  }, [options, groups, search]);
+
+  const selectedLabel = allOptions.find((o) => o.value === value)?.label;
 
   useEffect(() => {
     if (open && searchRef.current) {
@@ -210,28 +233,63 @@ export function ComboBox({
             </div>
             {/* Options */}
             <div className="max-h-48 overflow-y-auto py-1">
-              {filtered.length === 0 ? (
-                <p className="px-3 py-4 text-center text-sm text-surface-400">
-                  Sonuç bulunamadı
-                </p>
+              {groups ? (
+                // Grouped rendering
+                (filtered as ComboBoxGroup[]).length === 0 ? (
+                  <p className="px-3 py-4 text-center text-sm text-surface-400">
+                    Sonuç bulunamadı
+                  </p>
+                ) : (
+                  (filtered as ComboBoxGroup[]).map((group) => (
+                    <div key={group.label}>
+                      <div className="px-3 py-1.5 text-2xs font-semibold uppercase tracking-wider text-surface-400 dark:text-surface-500 select-none">
+                        {group.label}
+                      </div>
+                      {group.options.map((opt) => (
+                        <button
+                          key={opt.value}
+                          type="button"
+                          onClick={() => handleSelect(opt.value)}
+                          disabled={opt.disabled}
+                          className={cn(
+                            "flex w-full items-center px-3 py-2 pl-5 text-left text-sm transition-colors",
+                            opt.value === value
+                              ? "bg-brand-50 text-brand-700 dark:bg-brand-900/30 dark:text-brand-300"
+                              : "text-surface-700 hover:bg-surface-50 dark:text-surface-300 dark:hover:bg-surface-700",
+                            opt.disabled && "cursor-not-allowed opacity-50",
+                          )}
+                        >
+                          {opt.label}
+                        </button>
+                      ))}
+                    </div>
+                  ))
+                )
               ) : (
-                filtered.map((opt) => (
-                  <button
-                    key={opt.value}
-                    type="button"
-                    onClick={() => handleSelect(opt.value)}
-                    disabled={opt.disabled}
-                    className={cn(
-                      "flex w-full items-center px-3 py-2 text-left text-sm transition-colors",
-                      opt.value === value
-                        ? "bg-brand-50 text-brand-700 dark:bg-brand-900/30 dark:text-brand-300"
-                        : "text-surface-700 hover:bg-surface-50 dark:text-surface-300 dark:hover:bg-surface-700",
-                      opt.disabled && "cursor-not-allowed opacity-50",
-                    )}
-                  >
-                    {opt.label}
-                  </button>
-                ))
+                // Flat rendering
+                (filtered as ComboBoxOption[]).length === 0 ? (
+                  <p className="px-3 py-4 text-center text-sm text-surface-400">
+                    Sonuç bulunamadı
+                  </p>
+                ) : (
+                  (filtered as ComboBoxOption[]).map((opt) => (
+                    <button
+                      key={opt.value}
+                      type="button"
+                      onClick={() => handleSelect(opt.value)}
+                      disabled={opt.disabled}
+                      className={cn(
+                        "flex w-full items-center px-3 py-2 text-left text-sm transition-colors",
+                        opt.value === value
+                          ? "bg-brand-50 text-brand-700 dark:bg-brand-900/30 dark:text-brand-300"
+                          : "text-surface-700 hover:bg-surface-50 dark:text-surface-300 dark:hover:bg-surface-700",
+                        opt.disabled && "cursor-not-allowed opacity-50",
+                      )}
+                    >
+                      {opt.label}
+                    </button>
+                  ))
+                )
               )}
             </div>
           </div>

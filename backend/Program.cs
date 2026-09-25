@@ -155,6 +155,11 @@ using (var scope = app.Services.CreateScope())
         // Reset admin password to admin123
         var hash = BCrypt.Net.BCrypt.HashPassword("admin123");
         db.Database.ExecuteSqlRaw($"UPDATE [dbo].[Users] SET [HashedPassword] = '{hash}' WHERE [Email] = 'admin@wam.com.tr'");
+
+        // ──── FirmType kolonu ────
+        db.Database.ExecuteSqlRaw(@"
+            IF NOT EXISTS (SELECT 1 FROM INFORMATION_SCHEMA.COLUMNS WHERE TABLE_NAME = 'Companies' AND COLUMN_NAME = 'FirmType')
+            ALTER TABLE [dbo].[Companies] ADD [FirmType] NVARCHAR(20) NOT NULL DEFAULT 'EXTERNAL'");
     }
     catch (Exception ex) { Console.WriteLine($"[Migration] {ex.Message}"); }
 }

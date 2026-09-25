@@ -137,6 +137,7 @@ public class MeetingDbContext : DbContext
             e.HasKey(x => x.Id);
             e.Property(x => x.Name).HasMaxLength(200);
             e.Property(x => x.ShortName).HasMaxLength(50);
+            e.Property(x => x.FirmType).HasMaxLength(20).HasDefaultValue("EXTERNAL");
             e.Property(x => x.IsActive).HasDefaultValue(true);
             ConfigureAuditFields(e);
             e.HasQueryFilter(x => !x.IsDeleted);

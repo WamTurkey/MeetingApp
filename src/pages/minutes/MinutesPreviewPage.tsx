@@ -1,8 +1,6 @@
 import { useState, useEffect, useRef } from "react";
 import { useParams, useNavigate } from "react-router-dom";
 import { ArrowLeft, Download, Printer, Loader2, FileSpreadsheet } from "lucide-react";
-import html2canvas from "html2canvas";
-import jsPDF from "jspdf";
 import { Button } from "@/shared/ui/Button";
 import { Badge } from "@/shared/ui/Badge";
 import { formatDate, formatDateTime } from "@/shared/lib/formatDate";
@@ -57,20 +55,26 @@ export function MinutesPreviewPage() {
   const infoNotes = notes.filter((n) => n.noteType === "INFO" || n.noteType === "NOTE");
 
   const exportToPDF = async () => {
-    if (!documentRef.current || !meeting) return;
+    if (!meeting) return;
     try {
       setIsExporting(true);
-      const canvas = await html2canvas(documentRef.current, { scale: 2 });
-      const imgData = canvas.toDataURL("image/png");
-      const pdf = new jsPDF({
-        orientation: "portrait",
-        unit: "mm",
-        format: "a4",
+      const url = `${import.meta.env.VITE_API_BASE_URL || "http://localhost:5180/api"}/meetings/${meeting.id}/export/pdf`;
+      const response = await fetch(url, {
+        method: "GET",
+        headers: {
+          Authorization: `Bearer ${localStorage.getItem("auth_token")}`,
+        }
       });
-      const pdfWidth = pdf.internal.pageSize.getWidth();
-      const pdfHeight = (canvas.height * pdfWidth) / canvas.width;
-      pdf.addImage(imgData, "PNG", 0, 0, pdfWidth, pdfHeight);
-      pdf.save(`${meeting.title || "Tutanak"}.pdf`);
+      if (!response.ok) throw new Error("PDF Export failed");
+      const blob = await response.blob();
+      const downloadUrl = window.URL.createObjectURL(blob);
+      const a = document.createElement("a");
+      a.href = downloadUrl;
+      a.download = `Tutanak_${meeting.id}_${new Date().toISOString().split("T")[0]}.pdf`;
+      document.body.appendChild(a);
+      a.click();
+      a.remove();
+      window.URL.revokeObjectURL(downloadUrl);
     } catch (err) {
       console.error("PDF Export error:", err);
     } finally {
@@ -82,7 +86,7 @@ export function MinutesPreviewPage() {
     if (!meeting) return;
     try {
       setIsExporting(true);
-      const url = `${import.meta.env.VITE_API_BASE_URL || "/api"}/meetings/${meeting.id}/export/excel`;
+      const url = `${import.meta.env.VITE_API_BASE_URL || "http://localhost:5180/api"}/meetings/${meeting.id}/export/excel`;
       const response = await fetch(url, {
         method: "GET",
         headers: {

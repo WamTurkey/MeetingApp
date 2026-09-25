@@ -1,9 +1,9 @@
 namespace MeetingApp.API.DTOs;
 
 // ──────────── Company ────────────
-public record CompanyDto(int Id, string Name, string? ShortName, bool IsActive);
-public record CreateCompanyDto(string Name, string? ShortName);
-public record UpdateCompanyDto(string Name, string? ShortName, bool IsActive);
+public record CompanyDto(int Id, string Name, string? ShortName, bool IsActive, string FirmType);
+public record CreateCompanyDto(string Name, string? ShortName, string FirmType = "EXTERNAL");
+public record UpdateCompanyDto(string Name, string? ShortName, bool IsActive, string FirmType);
 
 // ──────────── Project ────────────
 public record ProjectDto(int Id, string Name, string? Code, bool IsActive);

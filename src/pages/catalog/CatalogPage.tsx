@@ -56,6 +56,7 @@ export function CatalogPage() {
   const [showCatalogModal, setShowCatalogModal] = useState(false);
   const [showPersonModal, setShowPersonModal] = useState(false);
   const [editingPerson, setEditingPerson] = useState<PersonDto | null>(null);
+  const [editingCatalogId, setEditingCatalogId] = useState<number | null>(null);
 
   const loadAll = useCallback(async () => {
     try {
@@ -95,7 +96,7 @@ export function CatalogPage() {
       const person = people.find(p => p.id === id);
       if (person) { setEditingPerson(person); setShowPersonModal(true); }
     } else {
-      // For catalog items, open CatalogModal (it has its own list + add form)
+      setEditingCatalogId(id);
       setShowCatalogModal(true);
     }
   }, [activeTab, people]);
@@ -106,6 +107,7 @@ export function CatalogPage() {
       setEditingPerson(null);
       setShowPersonModal(true);
     } else {
+      setEditingCatalogId(null);
       setShowCatalogModal(true);
     }
   }, [activeTab]);
@@ -120,7 +122,7 @@ export function CatalogPage() {
 
     switch (activeTab) {
       case "people": return filterActive(people).map((p) => ({ id: p.id, primary: p.fullName, secondary: `${p.companyName ?? "—"} · ${p.title ?? "—"}`, tertiary: p.email ?? "", isActive: p.isActive }));
-      case "companies": return filterActive(companies).map((c) => ({ id: c.id, primary: c.name, secondary: c.shortName ?? "—", tertiary: "", isActive: c.isActive }));
+      case "companies": return filterActive(companies).map((c) => ({ id: c.id, primary: c.name, secondary: c.shortName ?? "—", tertiary: c.firmType === "INTERNAL" ? "🏢 İç Ekip" : "🤝 Dış Katılımcı", isActive: c.isActive }));
       case "projects": return filterActive(projects).map((p) => ({ id: p.id, primary: p.name, secondary: p.code ?? "—", tertiary: "", isActive: p.isActive }));
       case "locations": return filterActive(locations).map((l) => ({ id: l.id, primary: l.name, secondary: "", tertiary: "", isActive: l.isActive }));
       case "categories": return filterActive(categories).map((c) => ({ id: c.id, primary: c.name, secondary: "", tertiary: "", isActive: c.isActive }));
@@ -132,7 +134,7 @@ export function CatalogPage() {
   const columns = useMemo(() => {
     switch (activeTab) {
       case "people": return ["Ad Soyad", "Firma · Unvan", "E-posta"];
-      case "companies": return ["Firma Adı", "Kısa Ad", ""];
+      case "companies": return ["Firma Adı", "Kısa Ad", "Firma Tipi"];
       case "projects": return ["Proje Adı", "Proje Kodu", ""];
       case "locations": return ["Yer Adı", "", ""];
       case "categories": return ["Kategori Adı", "", ""];
@@ -253,9 +255,10 @@ export function CatalogPage() {
         <CatalogModal
           kind={activeTab as CatalogKind}
           isOpen={showCatalogModal}
-          onClose={() => setShowCatalogModal(false)}
-          onCreated={() => { setShowCatalogModal(false); loadAll(); }}
+          onClose={() => { setShowCatalogModal(false); setEditingCatalogId(null); }}
+          onCreated={() => { setShowCatalogModal(false); setEditingCatalogId(null); loadAll(); }}
           onDeleted={() => loadAll()}
+          editingItemId={editingCatalogId}
         />
       )}
 
@@ -264,9 +267,10 @@ export function CatalogPage() {
         <CatalogModal
           kind="titles"
           isOpen={showCatalogModal}
-          onClose={() => setShowCatalogModal(false)}
-          onCreated={() => { setShowCatalogModal(false); loadAll(); }}
+          onClose={() => { setShowCatalogModal(false); setEditingCatalogId(null); }}
+          onCreated={() => { setShowCatalogModal(false); setEditingCatalogId(null); loadAll(); }}
           onDeleted={() => loadAll()}
+          editingItemId={editingCatalogId}
         />
       )}
 

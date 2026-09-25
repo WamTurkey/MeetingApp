@@ -5,10 +5,9 @@ import React from "react";
  * Collects content (textarea), type (select), and optionally:
  * termin (deadline date), sorumlu (responsible person), durum (status).
  */
-import { type FormEvent, useState } from "react";
+import { type FormEvent, useState, useRef } from "react";
 import { Plus } from "lucide-react";
 import { Button } from "@/shared/ui/Button";
-import { Textarea } from "@/shared/ui/Textarea";
 import { Select } from "@/shared/ui/Select";
 import { Checkbox } from "@/shared/ui/Checkbox";
 import { Input } from "@/shared/ui/Input";
@@ -17,14 +16,8 @@ import type { NoteCreatePayload } from "@/entities/note/model";
 import type { NoteType, ActionStatus } from "@/shared/config/constants";
 import { fetchPersons } from "@/services/catalogService";
 import type { PersonDto } from "@/types/api";
+import { cn } from "@/shared/lib/cn";
 
-const STATUS_OPTIONS = [
-  { value: "", label: "Seçilmedi" },
-  { value: "OPEN", label: "Açık" },
-  { value: "IN_PROGRESS", label: "Sürüyor" },
-  { value: "DONE", label: "Tamamlandı" },
-  { value: "CANCELLED", label: "İptal" },
-];
 
 // RESPONSIBLE_OPTIONS is now computed inside the component using personOptions hook
 
@@ -35,7 +28,7 @@ export interface AddNoteFormProps {
   isLoading?: boolean;
 }
 
-function usePersonOptions() {
+export function usePersonOptions() {
   const [personOptions, setPersonOptions] = React.useState<{value: number; label: string}[]>([]);
   React.useEffect(() => {
     fetchPersons().then(data => {
@@ -63,16 +56,13 @@ export function AddNoteForm({
   const [responsibleId, setResponsibleId] = useState("");
   const [status, setStatus] = useState("");
   const [error, setError] = useState("");
+  const textareaRef = useRef<HTMLTextAreaElement>(null);
 
   async function handleSubmit(e: FormEvent) {
     e.preventDefault();
 
     if (!content.trim()) {
       setError("Not içeriği boş olamaz.");
-      return;
-    }
-    if (content.trim().length < 5) {
-      setError("Not içeriği en az 5 karakter olmalıdır.");
       return;
     }
 
@@ -93,109 +83,93 @@ export function AddNoteForm({
     setDeadline("");
     setResponsibleId("");
     setStatus("");
+    // Refocus textarea for next note
+    setTimeout(() => textareaRef.current?.focus(), 0);
   }
 
   // Filter out the empty "Tüm Tipler" option
   const typeOptions = NOTE_TYPE_OPTIONS.filter((o) => o.value !== "");
 
   return (
-    <form onSubmit={handleSubmit} className="flex flex-col gap-3" noValidate>
-      {/* Row 1: Textarea + Tip */}
-      <div className="flex flex-col gap-3 sm:flex-row sm:items-start">
-        <div className="flex-1">
-          <Textarea
-            placeholder="Yeni not, karar veya görev ekleyin..."
-            value={content}
-            onChange={(e) => setContent(e.target.value)}
-            error={error}
-            disabled={isLoading}
-            rows={3}
-          />
-        </div>
-        <div className="w-full sm:w-36 shrink-0">
-          <Select
-            label="Tip"
-            options={typeOptions}
-            value={type}
-            onChange={(e) => setType(e.target.value as NoteType)}
-            disabled={isLoading}
-          />
-        </div>
+    <div className="flex w-full items-start gap-2 text-sm py-2 px-3 bg-surface-50 dark:bg-surface-800/30 border-b border-surface-200 dark:border-surface-700/50 last:border-0">
+      <div className="w-6 shrink-0" />
+      <div className="w-24 shrink-0" />
+      <div className="flex-1 min-w-[200px]">
+        <textarea
+          ref={textareaRef}
+          value={content}
+          onChange={(e) => {
+            setContent(e.target.value);
+            e.target.style.height = 'auto';
+            e.target.style.height = e.target.scrollHeight + 'px';
+            if (error) setError("");
+          }}
+          onKeyDown={(e) => {
+            if (e.key === "Enter" && !e.shiftKey) {
+              e.preventDefault();
+              handleSubmit(e as any);
+            }
+          }}
+          className={cn(
+            "w-full bg-white dark:bg-surface-900 border rounded focus:ring-1 p-1 text-sm resize-none focus:outline-none min-h-[32px] overflow-hidden leading-relaxed",
+            error ? "border-danger-500 focus:ring-danger-500" : "border-surface-200 focus:border-brand-500 focus:ring-brand-500"
+          )}
+          rows={1}
+          placeholder="Karar / görev metni... (Kaydetmek için Enter'a basın)"
+          autoFocus
+        />
+        {error && <div className="text-danger-500 text-xs mt-1">{error}</div>}
       </div>
-
-      {/* Row 2: Termin / Sorumlu / Durum — horizontal strip */}
-      <div className="flex flex-wrap items-end gap-3 rounded-lg border border-border bg-surface-50/50 px-3 py-2.5 dark:bg-surface-800/50">
-        {/* Termin */}
-        <div className="flex items-center gap-2">
+      <div className="w-24 shrink-0 text-center text-xs text-surface-400 font-mono pt-1.5">
+        —
+      </div>
+      <div className="w-28 shrink-0">
+        <Select
+          options={typeOptions}
+          value={type}
+          onChange={(e) => setType(e.target.value as NoteType)}
+          disabled={isLoading}
+          className="h-8 text-xs !py-1 !px-2 bg-white dark:bg-surface-900"
+        />
+      </div>
+      <div className="w-64 shrink-0 flex items-start gap-2">
+        <label className="flex items-center gap-1.5 pt-2 cursor-pointer select-none">
           <Checkbox
-            label="Termin"
             checked={hasDeadline}
-            onChange={(c) => { setHasDeadline(c); if (!c) setDeadline(""); }}
+            onChange={(c) => { setHasDeadline(c); if (!c) { setDeadline(""); setResponsibleId(""); } }}
             disabled={isLoading}
           />
-          {hasDeadline && (
+          <span className="text-xs text-surface-600">Termin</span>
+        </label>
+        {hasDeadline && (
+          <div className="flex flex-col gap-1 flex-1">
             <Input
               type="date"
               value={deadline}
               onChange={(e) => setDeadline(e.target.value)}
               disabled={isLoading}
-              className="!py-1 !text-xs w-36"
+              className="h-8 text-xs !py-1 !px-2"
             />
-          )}
-        </div>
-
-        {/* Separator */}
-        <div className="hidden sm:block h-6 w-px bg-surface-200 dark:bg-surface-600" />
-
-        {/* Sorumlu */}
-        <div className="w-full sm:w-44">
-          <Select
-            label="Sorumlu"
-            options={RESPONSIBLE_OPTIONS}
-            value={responsibleId}
-            onChange={(e) => setResponsibleId(e.target.value)}
-            disabled={isLoading}
-          />
-        </div>
-
-        {/* Separator */}
-        <div className="hidden sm:block h-6 w-px bg-surface-200 dark:bg-surface-600" />
-
-        {/* Durum */}
-        <div className="w-full sm:w-36">
-          <Select
-            label="Durum"
-            options={STATUS_OPTIONS}
-            value={status}
-            onChange={(e) => setStatus(e.target.value)}
-            disabled={isLoading}
-          />
-        </div>
+            <Select
+              options={RESPONSIBLE_OPTIONS}
+              value={responsibleId}
+              onChange={(e) => setResponsibleId(e.target.value)}
+              disabled={isLoading}
+              className="h-8 text-xs !py-1 !px-2"
+            />
+          </div>
+        )}
       </div>
-
-      {/* Row 3: Actions */}
-      <div className="flex items-center justify-end gap-2">
+      <div className="w-auto shrink-0 flex justify-end gap-1 pt-1">
         {onCancel && (
-          <Button
-            type="button"
-            variant="ghost"
-            size="sm"
-            onClick={onCancel}
-            disabled={isLoading}
-          >
-            İptal
+          <Button type="button" variant="ghost" size="sm" onClick={onCancel} className="!p-1 text-surface-400 hover:text-surface-600">
+            Kapat
           </Button>
         )}
-        <Button
-          type="submit"
-          variant="primary"
-          size="sm"
-          isLoading={isLoading}
-          icon={<Plus className="h-3.5 w-3.5" />}
-        >
-          Not Ekle
+        <Button type="button" variant="ghost" size="sm" onClick={(e) => handleSubmit(e as any)} className="!p-1 text-brand-600 hover:text-brand-700 hover:bg-brand-50 dark:hover:bg-brand-900/30">
+          <Plus className="h-4 w-4" />
         </Button>
       </div>
-    </form>
+    </div>
   );
 }
