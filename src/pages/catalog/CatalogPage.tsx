@@ -1,6 +1,9 @@
 import { toast } from "sonner";
-import { useState, useMemo, useEffect, useCallback } from "react";
+import { useState, useMemo, useCallback } from "react";
 import { Search, Settings2, Loader2, Plus, Pencil, Trash2, Building2, Users, FolderKanban, MapPin, Tag, Award } from "lucide-react";
+import {
+  usePersons, useCompanies, useProjects, useLocations, useCategories, useTitles,
+} from "@/entities/catalog/api/queries";
 import { SearchBar } from "@/shared/ui/SearchBar";
 import { Badge } from "@/shared/ui/Badge";
 import { Button } from "@/shared/ui/Button";
@@ -8,11 +11,8 @@ import { EmptyState } from "@/shared/ui/EmptyState";
 import { cn } from "@/shared/lib/cn";
 import { CatalogModal, type CatalogKind } from "@/features/manage-catalog";
 import { PersonModal } from "./PersonModal";
-import {
-  fetchPersons, fetchCompanies, fetchProjects, fetchLocations, fetchCategories,
-  deletePerson, deleteCompany, deleteProject, deleteLocation, deleteCategory, deleteTitle,
-  fetchTitles,
-} from "@/services/catalogService";
+import { useDeleteCatalogItem } from "@/entities/catalog/api/mutations";
+import type { CatalogEntity } from "@/shared/api/invalidation";
 import type { PersonDto, CompanyDto, ProjectDto, LocationDto, CategoryDto, TitleDto } from "@/types/api";
 
 type TabKey = "people" | "titles" | CatalogKind;
@@ -42,15 +42,22 @@ export function CatalogPage() {
   const [activeTab, setActiveTab] = useState<TabKey>("people");
   const [search, setSearch] = useState("");
   const [showArchived, setShowArchived] = useState(false);
-  const [isLoading, setIsLoading] = useState(true);
 
-  // Raw data
-  const [people, setPeople] = useState<PersonDto[]>([]);
-  const [companies, setCompanies] = useState<CompanyDto[]>([]);
-  const [projects, setProjects] = useState<ProjectDto[]>([]);
-  const [locations, setLocations] = useState<LocationDto[]>([]);
-  const [categories, setCategories] = useState<CategoryDto[]>([]);
-  const [titles, setTitles] = useState<TitleDto[]>([]);
+  // Raw data — ortak katalog önbelleği (dropdown'larla aynı anahtarlar)
+  const { mutateAsync: deleteCatalogItem } = useDeleteCatalogItem();
+  const personsQ = usePersons();
+  const companiesQ = useCompanies();
+  const projectsQ = useProjects();
+  const locationsQ = useLocations();
+  const categoriesQ = useCategories();
+  const titlesQ = useTitles();
+  const people: PersonDto[] = useMemo(() => personsQ.data ?? [], [personsQ.data]);
+  const companies: CompanyDto[] = useMemo(() => companiesQ.data ?? [], [companiesQ.data]);
+  const projects: ProjectDto[] = useMemo(() => projectsQ.data ?? [], [projectsQ.data]);
+  const locations: LocationDto[] = useMemo(() => locationsQ.data ?? [], [locationsQ.data]);
+  const categories: CategoryDto[] = useMemo(() => categoriesQ.data ?? [], [categoriesQ.data]);
+  const titles: TitleDto[] = useMemo(() => titlesQ.data ?? [], [titlesQ.data]);
+  const isLoading = [personsQ, companiesQ, projectsQ, locationsQ, categoriesQ, titlesQ].some((q) => q.isPending);
 
   // Modal state
   const [showCatalogModal, setShowCatalogModal] = useState(false);
@@ -58,37 +65,23 @@ export function CatalogPage() {
   const [editingPerson, setEditingPerson] = useState<PersonDto | null>(null);
   const [editingCatalogId, setEditingCatalogId] = useState<number | null>(null);
 
-  const loadAll = useCallback(async () => {
-    try {
-      setIsLoading(true);
-      const [p, co, pr, lo, ca, ti] = await Promise.all([
-        fetchPersons(), fetchCompanies(), fetchProjects(), fetchLocations(), fetchCategories(), fetchTitles(),
-      ]);
-      setPeople(p); setCompanies(co); setProjects(pr); setLocations(lo); setCategories(ca); setTitles(ti);
-    } catch (err) {
-        toast.error("İşlem sırasında bir hata oluştu"); console.error("[Catalog] Load error:", err); }
-    finally { setIsLoading(false); }
-  }, []);
-
-  useEffect(() => { loadAll(); }, [loadAll]);
+  // Not: Ekleme / güncelleme / silme sonrası tazeleme mutasyon hook'larında yapılır (elle reload yok)
 
   // ──────── Delete handlers ────────
+  const [deletingId, setDeletingId] = useState<number | null>(null);
   const handleDelete = useCallback(async (id: number) => {
     const label = TAB_LABELS[activeTab];
+    if (deletingId !== null) return;
     if (!window.confirm(`Bu ${label.toLowerCase()} kaydını silmek istediğinizden emin misiniz?`)) return;
+    setDeletingId(id);
     try {
-      switch (activeTab) {
-        case "people": await deletePerson(id); break;
-        case "companies": await deleteCompany(id); break;
-        case "projects": await deleteProject(id); break;
-        case "locations": await deleteLocation(id); break;
-        case "categories": await deleteCategory(id); break;
-        case "titles": await deleteTitle(id); break;
-      }
-      await loadAll();
+      const entity: CatalogEntity = activeTab === "people" ? "persons" : activeTab;
+      await deleteCatalogItem({ entity, id }); // liste + bağımlı dropdown'lar tazelenir
+      toast.success(`${label} silindi`);
     } catch (err) {
         toast.error("İşlem sırasında bir hata oluştu"); console.error("Delete error:", err); }
-  }, [activeTab, loadAll]);
+    finally { setDeletingId(null); }
+  }, [activeTab, deleteCatalogItem, deletingId]);
 
   // ──────── Edit handlers ────────
   const handleEdit = useCallback((id: number) => {
@@ -235,10 +228,12 @@ export function CatalogPage() {
                       <button
                         type="button"
                         onClick={() => handleDelete(row.id)}
-                        className="rounded-md p-1.5 text-surface-400 transition-colors hover:bg-danger-50 hover:text-danger-600 dark:hover:bg-danger-950/30 dark:hover:text-danger-400"
+                        disabled={deletingId !== null}
+                        aria-busy={deletingId === row.id}
+                        className="rounded-md p-1.5 text-surface-400 transition-colors hover:bg-danger-50 hover:text-danger-600 disabled:cursor-not-allowed disabled:opacity-50 dark:hover:bg-danger-950/30 dark:hover:text-danger-400"
                         title="Sil"
                       >
-                        <Trash2 className="h-4 w-4" />
+                        {deletingId === row.id ? <Loader2 className="h-4 w-4 animate-spin" /> : <Trash2 className="h-4 w-4" />}
                       </button>
                     </div>
                   </td>
@@ -256,8 +251,7 @@ export function CatalogPage() {
           kind={activeTab as CatalogKind}
           isOpen={showCatalogModal}
           onClose={() => { setShowCatalogModal(false); setEditingCatalogId(null); }}
-          onCreated={() => { setShowCatalogModal(false); setEditingCatalogId(null); loadAll(); }}
-          onDeleted={() => loadAll()}
+          onCreated={() => { setShowCatalogModal(false); setEditingCatalogId(null); }}
           editingItemId={editingCatalogId}
         />
       )}
@@ -268,8 +262,7 @@ export function CatalogPage() {
           kind="titles"
           isOpen={showCatalogModal}
           onClose={() => { setShowCatalogModal(false); setEditingCatalogId(null); }}
-          onCreated={() => { setShowCatalogModal(false); setEditingCatalogId(null); loadAll(); }}
-          onDeleted={() => loadAll()}
+          onCreated={() => { setShowCatalogModal(false); setEditingCatalogId(null); }}
           editingItemId={editingCatalogId}
         />
       )}
@@ -278,7 +271,7 @@ export function CatalogPage() {
       <PersonModal
         isOpen={showPersonModal}
         onClose={() => { setShowPersonModal(false); setEditingPerson(null); }}
-        onSaved={() => { setShowPersonModal(false); setEditingPerson(null); loadAll(); }}
+        onSaved={() => { setShowPersonModal(false); setEditingPerson(null); }}
         editingPerson={editingPerson}
         companies={companies}
       />

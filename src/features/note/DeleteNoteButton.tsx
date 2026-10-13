@@ -22,10 +22,18 @@ export function DeleteNoteButton({
   isLoading = false,
 }: DeleteNoteButtonProps) {
   const [isOpen, setIsOpen] = useState(false);
+  const [isPending, setIsPending] = useState(false);
+  const busy = isLoading || isPending;
 
   async function handleConfirm() {
-    await onDelete(note.id);
-    setIsOpen(false);
+    if (busy) return; // mükerrer tıklama koruması
+    setIsPending(true);
+    try {
+      await onDelete(note.id);
+      setIsOpen(false);
+    } finally {
+      setIsPending(false);
+    }
   }
 
   const preview =
@@ -39,6 +47,7 @@ export function DeleteNoteButton({
         variant="ghost"
         size="sm"
         onClick={() => setIsOpen(true)}
+        isLoading={busy}
         icon={<Trash2 className="h-3.5 w-3.5" />}
         className="text-surface-400 hover:text-danger-600"
         aria-label="Notu sil"
@@ -46,14 +55,14 @@ export function DeleteNoteButton({
 
       <ConfirmDialog
         isOpen={isOpen}
-        onClose={() => setIsOpen(false)}
+        onClose={() => { if (!busy) setIsOpen(false); }}
         onConfirm={handleConfirm}
         title="Notu Sil"
         description={`"${preview}" notu kalıcı olarak silinecektir.`}
         confirmLabel="Sil"
         cancelLabel="Vazgeç"
         variant="danger"
-        isLoading={isLoading}
+        isLoading={busy}
       />
     </>
   );

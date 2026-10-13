@@ -25,7 +25,7 @@ import { DatePicker } from "@/shared/ui/DatePicker";
 import { TimePicker } from "@/shared/ui/TimePicker";
 import { ComboBox } from "@/shared/ui/ComboBox";
 import { Checkbox } from "@/shared/ui/Checkbox";
-import { fetchMeetings } from "@/services/meetingService";
+import { useMeetingsList } from "@/entities/meeting/api/queries";
 
 import { CatalogModal } from "@/features/manage-catalog";
 import { useCatalog, type CatalogKind } from "@/features/manage-catalog/hooks/useCatalog";
@@ -99,13 +99,9 @@ export function CreateMeetingModal({
   const previousMeetingId = watch("previousMeetingId");
 
   // Previous meetings list for dropdown
-  const [allMeetings, setAllMeetings] = useState<any[]>([]);
-
-  useEffect(() => {
-    if (isOpen) {
-      fetchMeetings().then(res => setAllMeetings(res.items)).catch(console.error);
-    }
-  }, [isOpen]);
+  // Yalnızca modal açıkken çekilir; MeetingLinksPanel ile aynı önbellek anahtarı
+  const allMeetingsQuery = useMeetingsList({ pageSize: 1000 }, { enabled: isOpen });
+  const allMeetings = allMeetingsQuery.data?.items ?? [];
 
   const previousMeetingOptions = allMeetings.map((m) => ({
     value: m.id,

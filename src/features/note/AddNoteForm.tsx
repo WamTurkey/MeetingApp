@@ -6,7 +6,7 @@ import React from "react";
  * termin (deadline date), sorumlu (responsible person), durum (status).
  */
 import { type FormEvent, useState, useRef } from "react";
-import { Plus } from "lucide-react";
+import { Plus, X, GripVertical } from "lucide-react";
 import { Button } from "@/shared/ui/Button";
 import { Select } from "@/shared/ui/Select";
 import { Checkbox } from "@/shared/ui/Checkbox";
@@ -14,7 +14,7 @@ import { Input } from "@/shared/ui/Input";
 import { NOTE_TYPE_OPTIONS } from "@/entities/note/constants";
 import type { NoteCreatePayload } from "@/entities/note/model";
 import type { NoteType, ActionStatus } from "@/shared/config/constants";
-import { fetchPersons } from "@/services/catalogService";
+import { usePersons } from "@/entities/catalog/api/queries";
 import type { PersonDto } from "@/types/api";
 import { cn } from "@/shared/lib/cn";
 
@@ -28,14 +28,16 @@ export interface AddNoteFormProps {
   isLoading?: boolean;
 }
 
+/**
+ * Aktif kişi seçenekleri — React Query önbelleğinden.
+ * Her not satırı bu hook'u çağırsa da ağa tek `GET /Persons` isteği gider (önceden satır başına 1 istek).
+ */
 export function usePersonOptions() {
-  const [personOptions, setPersonOptions] = React.useState<{value: number; label: string}[]>([]);
-  React.useEffect(() => {
-    fetchPersons().then(data => {
-      setPersonOptions(data.filter(p => p.isActive).map((p: PersonDto) => ({ value: p.id, label: p.fullName })));
-    }).catch(console.error);
-  }, []);
-  return personOptions;
+  const { data } = usePersons();
+  return React.useMemo(
+    () => (data ?? []).filter((p) => p.isActive).map((p: PersonDto) => ({ value: p.id, label: p.fullName })),
+    [data],
+  );
 }
 
 export function AddNoteForm({
@@ -91,9 +93,13 @@ export function AddNoteForm({
   const typeOptions = NOTE_TYPE_OPTIONS.filter((o) => o.value !== "");
 
   return (
-    <div className="flex w-full items-start gap-2 text-sm py-2 px-3 bg-surface-50 dark:bg-surface-800/30 border-b border-surface-200 dark:border-surface-700/50 last:border-0">
-      <div className="w-6 shrink-0" />
-      <div className="w-24 shrink-0" />
+    <form onSubmit={handleSubmit} className="flex w-full items-start gap-2 text-sm py-2 px-3 bg-surface-50/80 dark:bg-surface-800/50 border-b border-brand-200 dark:border-brand-800/50 relative shadow-inner ring-1 ring-inset ring-brand-100 dark:ring-brand-900/30">
+      <div className="w-6 shrink-0 pt-1.5 flex justify-center text-surface-300 opacity-50 cursor-not-allowed">
+        <GripVertical className="h-4 w-4" />
+      </div>
+      <div className="w-24 shrink-0 text-xs text-surface-400 font-medium pt-1.5 truncate">
+        Yeni Not...
+      </div>
       <div className="flex-1 min-w-[200px]">
         <textarea
           ref={textareaRef}
@@ -163,13 +169,13 @@ export function AddNoteForm({
       <div className="w-auto shrink-0 flex justify-end gap-1 pt-1">
         {onCancel && (
           <Button type="button" variant="ghost" size="sm" onClick={onCancel} className="!p-1 text-surface-400 hover:text-surface-600">
-            Kapat
+            <X className="h-4 w-4" />
           </Button>
         )}
-        <Button type="button" variant="ghost" size="sm" onClick={(e) => handleSubmit(e as any)} className="!p-1 text-brand-600 hover:text-brand-700 hover:bg-brand-50 dark:hover:bg-brand-900/30">
+        <Button type="submit" variant="ghost" size="sm" className="!p-1 text-brand-600 hover:text-brand-700 hover:bg-brand-50 dark:hover:bg-brand-900/30">
           <Plus className="h-4 w-4" />
         </Button>
       </div>
-    </div>
+    </form>
   );
 }

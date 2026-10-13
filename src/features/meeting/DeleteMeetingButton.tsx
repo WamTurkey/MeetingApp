@@ -23,12 +23,20 @@ export function DeleteMeetingButton({
   isLoading = false,
 }: DeleteMeetingButtonProps) {
   const [isOpen, setIsOpen] = useState(false);
+  const [isPending, setIsPending] = useState(false);
+  const busy = isLoading || isPending;
 
   if (!IS_DELETABLE[meeting.status]) return null;
 
   async function handleConfirm() {
-    await onDelete(meeting.id);
-    setIsOpen(false);
+    if (busy) return; // mükerrer tıklama koruması
+    setIsPending(true);
+    try {
+      await onDelete(meeting.id);
+      setIsOpen(false);
+    } finally {
+      setIsPending(false);
+    }
   }
 
   return (
@@ -37,6 +45,7 @@ export function DeleteMeetingButton({
         variant="outline"
         size="md"
         onClick={() => setIsOpen(true)}
+        isLoading={busy}
         icon={<Trash2 className="h-4 w-4" />}
         className="text-danger-600 border-danger-200 hover:bg-danger-50"
       >
@@ -45,14 +54,14 @@ export function DeleteMeetingButton({
 
       <ConfirmDialog
         isOpen={isOpen}
-        onClose={() => setIsOpen(false)}
+        onClose={() => { if (!busy) setIsOpen(false); }}
         onConfirm={handleConfirm}
         title="Toplantıyı Sil"
-        description={`"${meeting.title}" toplantısı kalıcı olarak silinecektir. Bu işlem geri alınamaz.`}
+        description={`"${meeting.title}" toplantısı ile bağlı notlar, katılımcılar, toplantı bağlantıları ve takip maddeleri silinecektir.`}
         confirmLabel="Evet, Sil"
         cancelLabel="Vazgeç"
         variant="danger"
-        isLoading={isLoading}
+        isLoading={busy}
       />
     </>
   );

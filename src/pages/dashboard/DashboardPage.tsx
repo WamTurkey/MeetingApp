@@ -1,11 +1,14 @@
-import { useState, useEffect, useCallback } from "react";
+import { useState, useMemo } from "react";
 import { useNavigate } from "react-router-dom";
 import { Plus, ArrowRight, Loader2 } from "lucide-react";
+import { EmptyState } from "@/shared/ui/EmptyState";
 import { Button } from "@/shared/ui/Button";
 import { StatsOverview } from "@/widgets/stats-overview/StatsOverview";
 import { MeetingCard } from "@/widgets/meeting-card/MeetingCard";
 import { CreateMeetingModal } from "@/features/create-meeting";
-import { fetchMeetings, createMeeting } from "@/services/meetingService";
+import { useCreateMeeting } from "@/entities/meeting/api/mutations";
+import { toast } from "sonner";
+import { useMeetingsList } from "@/entities/meeting/api/queries";
 import type { Meeting } from "@/entities/meeting/model";
 import type { MeetingListItem, CreateMeetingRequest } from "@/types/api";
 import type { MeetingStatus } from "@/shared/config/constants";
@@ -23,24 +26,12 @@ function toMeeting(item: MeetingListItem): Meeting {
 }
 
 export function DashboardPage() {
+  const { mutateAsync: createMeeting } = useCreateMeeting();
   const navigate = useNavigate();
-  const [meetings, setMeetings] = useState<Meeting[]>([]);
   const [showCreate, setShowCreate] = useState(false);
-  const [isLoading, setIsLoading] = useState(true);
-
-  const loadMeetings = useCallback(async () => {
-    try {
-      setIsLoading(true);
-      const data = await fetchMeetings({ pageSize: 50 });
-      setMeetings(data.items.map(toMeeting));
-    } catch (err) {
-      console.error("[Dashboard] Load error:", err);
-    } finally {
-      setIsLoading(false);
-    }
-  }, []);
-
-  useEffect(() => { loadMeetings(); }, [loadMeetings]);
+  const meetingsQuery = useMeetingsList({ pageSize: 50 });
+  const meetings = useMemo<Meeting[]>(() => meetingsQuery.data?.items.map(toMeeting) ?? [], [meetingsQuery.data]);
+  const isLoading = meetingsQuery.isPending;
 
   const recentMeetings = meetings.slice(0, 3);
 
@@ -56,11 +47,12 @@ export function DashboardPage() {
         locationId: (payload.locationId as number) || undefined,
         categoryId: (payload.categoryId as number) || undefined,
       };
-      await createMeeting(dto);
+      await createMeeting(dto); // useCreateMeeting → toplantı listeleri anında tazelenir
       setShowCreate(false);
-      await loadMeetings();
+      toast.success("Toplantı başarıyla oluşturuldu");
     } catch (err) {
       console.error("[Dashboard] Create error:", err);
+      toast.error("Toplantı oluşturulamadı");
     }
   }
 
@@ -110,7 +102,12 @@ export function DashboardPage() {
             <span className="ml-2 text-surface-500">Yükleniyor…</span>
           </div>
         ) : recentMeetings.length === 0 ? (
-          <p className="text-center text-sm text-surface-400 py-8">Henüz toplantı yok.</p>
+          <EmptyState
+            compact
+            message="Henüz toplantı yok"
+            description="İlk toplantınızı oluşturarak başlayın."
+            action={<Button size="sm" icon={<Plus className="h-4 w-4" />} onClick={() => setShowCreate(true)}>Yeni Toplantı</Button>}
+          />
         ) : (
           <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
             {recentMeetings.map((meeting) => (

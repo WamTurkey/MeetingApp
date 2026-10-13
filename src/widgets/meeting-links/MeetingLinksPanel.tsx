@@ -1,6 +1,8 @@
-import { useState, useEffect } from "react";
+import { useState, useMemo } from "react";
 import { useNavigate } from "react-router-dom";
-import { Link2, ChevronRight, ArrowLeft, ArrowRight, Plus, Trash2 } from "lucide-react";
+import { useNavFrom } from "@/shared/lib/navigation";
+import { Link2, ChevronRight, ArrowLeft, ArrowRight, Plus, Trash2, Loader2, GitBranch } from "lucide-react";
+import { EmptyState } from "@/shared/ui/EmptyState";
 import { Card, CardContent } from "@/shared/ui/Card";
 import { Badge } from "@/shared/ui/Badge";
 import { Button } from "@/shared/ui/Button";
@@ -8,18 +10,48 @@ import { ComboBox } from "@/shared/ui/ComboBox";
 import { formatDate } from "@/shared/lib/formatDate";
 import { RELATION_LABEL, type RelationType } from "@/shared/config/constants";
 import type { Meeting } from "@/entities/meeting/model";
-import { fetchMeetings, addMeetingLink, deleteMeetingLink } from "@/services/meetingService";
+import { useAddMeetingLink, useDeleteMeetingLink } from "@/entities/meeting/api/mutations";
+import { useMeetingsList } from "@/entities/meeting/api/queries";
 import { toast } from "sonner";
+
+/** Backend'den dönen bağlantı hatasını kullanıcı dostu Toast'a çevirir. */
+function notifyLinkError(error: any) {
+  const status: number | undefined = error?.response?.status;
+  const data = error?.response?.data;
+  const message: string = (typeof data === "string" ? data : data?.message) ?? "";
+  const isCyclic =
+    data?.code === "CYCLIC_LINK" ||
+    /döngü|dongu|cycl|circular/i.test(message) ||
+    (status === 500 && /link/i.test(message));
+
+  if (isCyclic) {
+    toast.error("Döngüsel bağlı toplantı oluşturulamaz", {
+      description: "Seçilen toplantı zaten bu toplantının devamı/takibi zincirinde yer alıyor.",
+    });
+  } else if (status === 409) {
+    toast.warning("Bu toplantı zaten bağlı.");
+  } else if (status === 400 && message) {
+    toast.error(message);
+  } else {
+    toast.error("Toplantı bağlanırken bir hata oluştu.");
+  }
+}
 
 interface MeetingLinksPanelProps {
   meeting: Meeting;
+  /** İsteğe bağlı ek geri çağırım — önbellek tazelemesi mutasyon hook'larında yapılır */
   onRefresh?: () => void;
 }
 
 export function MeetingLinksPanel({ meeting, onRefresh }: MeetingLinksPanelProps) {
   const navigate = useNavigate();
+  const navFrom = useNavFrom(meeting.title); // B toplantısından "Geri" → A toplantısının Bağlantılar sekmesi
+  const { mutateAsync: addLink } = useAddMeetingLink();
+  const { mutateAsync: removeLink } = useDeleteMeetingLink(meeting.id);
 
-  const [allMeetings, setAllMeetings] = useState<any[]>([]);
+  // Bağlanabilecek toplantılar — CreateMeetingModal ile aynı önbellek anahtarı
+  const allMeetingsQuery = useMeetingsList({ pageSize: 1000 });
+  const allMeetings = useMemo(() => allMeetingsQuery.data?.items ?? [], [allMeetingsQuery.data]);
   const [selectedPrev, setSelectedPrev] = useState<number | null>(null);
 
   // States for adding child meeting
@@ -28,26 +60,26 @@ export function MeetingLinksPanel({ meeting, onRefresh }: MeetingLinksPanelProps
   const [selectedChild, setSelectedChild] = useState<number | null>(null);
   
   const [isDeleting, setIsDeleting] = useState<number | null>(null);
-
-  useEffect(() => {
-    fetchMeetings({ pageSize: 1000 }).then(res => setAllMeetings(res.items)).catch(console.error);
-  }, []);
+  const [isLinking, setIsLinking] = useState(false);
 
   const previous = meeting.linkedMeetings?.find((m: any) => m.direction === "PARENT");
   const following = meeting.linkedMeetings?.filter((m: any) => m.direction === "CHILD") || [];
 
-  // Önceki toplantı seçenekleri
+  // Doğrudan döngü yaratacak seçenekleri baştan gizle (asıl kontrol backend'de)
+  const followingIds = new Set<number>(following.map((c: any) => c.linkedMeetingId));
+
+  // Önceki toplantı seçenekleri — bu toplantının devamı olan toplantılar "önceki" olamaz
   const previousMeetingOptions = allMeetings
-    .filter((m) => m.id !== meeting.id)
+    .filter((m) => m.id !== meeting.id && !followingIds.has(m.id))
     .map((m) => ({
       value: m.id,
       label: `[${m.statusDisplay}] #${m.id} - ${m.title}`,
       description: formatDate(m.meetingDate, "short"),
     }));
 
-  // Sonraki toplantı seçenekleri
+  // Sonraki toplantı seçenekleri — önceki toplantı ve zaten bağlı olanlar hariç
   const followingMeetingOptions = allMeetings
-    .filter((m) => m.id !== meeting.id)
+    .filter((m) => m.id !== meeting.id && m.id !== previous?.linkedMeetingId && !followingIds.has(m.id))
     .map((m) => ({
       value: m.id,
       label: `[${m.statusDisplay}] #${m.id} - ${m.title}`,
@@ -55,35 +87,33 @@ export function MeetingLinksPanel({ meeting, onRefresh }: MeetingLinksPanelProps
     }));
 
   const handleLinkPrevious = async (val: number | null) => {
-    if (!val) return;
+    if (!val || isLinking) return;
+    setIsLinking(true);
     try {
       // Önceki toplantı eklemek demek: O toplantının (val) sayfasına gidip, bu toplantıyı (meeting.id) child olarak eklemek demek.
-      await addMeetingLink(val, { childMeetingId: meeting.id, relationType: "CONTINUATION" });
+      await addLink({ meetingId: val, dto: { childMeetingId: meeting.id, relationType: "CONTINUATION" } });
       toast.success("Önceki toplantı başarıyla bağlandı.");
       if (onRefresh) onRefresh();
     } catch (error: any) {
-      if (error?.response?.status === 409) {
-        toast.warning("Bu toplantı zaten bağlı.");
-      } else {
-        toast.error("Toplantı bağlanırken bir hata oluştu.");
-      }
+      notifyLinkError(error);
+    } finally {
+      setIsLinking(false);
     }
     setSelectedPrev(null);
   };
 
   const handleLinkChild = async () => {
-    if (!selectedChild) return;
+    if (!selectedChild || isLinking) return;
+    setIsLinking(true);
     try {
       // Sonraki toplantı eklemek demek: Bu toplantının (meeting.id) sayfasına, o toplantıyı (selectedChild) child olarak eklemek demek.
-      await addMeetingLink(meeting.id, { childMeetingId: selectedChild, relationType: childRelationType });
+      await addLink({ meetingId: meeting.id, dto: { childMeetingId: selectedChild, relationType: childRelationType } });
       toast.success("Sonraki toplantı başarıyla bağlandı.");
       if (onRefresh) onRefresh();
     } catch (error: any) {
-      if (error?.response?.status === 409) {
-        toast.warning("Bu toplantı zaten bağlı.");
-      } else {
-        toast.error("Toplantı bağlanırken bir hata oluştu.");
-      }
+      notifyLinkError(error);
+    } finally {
+      setIsLinking(false);
     }
     setIsAddingChild(false);
     setSelectedChild(null);
@@ -91,10 +121,11 @@ export function MeetingLinksPanel({ meeting, onRefresh }: MeetingLinksPanelProps
 
   const handleDeleteLink = async (e: React.MouseEvent, linkId: number) => {
     e.stopPropagation();
+    if (isDeleting !== null) return;
     setIsDeleting(linkId);
     try {
-      await deleteMeetingLink(meeting.id, linkId);
-      toast.error("Bağlantı başarıyla silindi.");
+      await removeLink(linkId);
+      toast.success("Bağlantı başarıyla silindi.");
       if (onRefresh) onRefresh();
     } catch (error) {
       toast.error("Bağlantı silinirken bir hata oluştu.");
@@ -117,7 +148,7 @@ export function MeetingLinksPanel({ meeting, onRefresh }: MeetingLinksPanelProps
         <div>
           <p className="mb-2 text-xs font-semibold uppercase tracking-wider text-surface-400">Önceki Toplantı</p>
           {previous ? (
-            <Card hoverable onClick={() => navigate(`/meetings/${previous.linkedMeetingId}`)} className="group">
+            <Card hoverable onClick={() => navigate(`/meetings/${previous.linkedMeetingId}`, { state: navFrom })} className="group">
               <CardContent className="flex items-center gap-3">
                 <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg bg-surface-100 text-surface-500 dark:bg-surface-700 dark:text-surface-400">
                   <ArrowLeft className="h-4 w-4" />
@@ -133,9 +164,10 @@ export function MeetingLinksPanel({ meeting, onRefresh }: MeetingLinksPanelProps
                     size="sm" 
                     className="h-8 w-8 p-0 text-surface-400 hover:text-danger-600 hover:bg-danger-50 opacity-0 group-hover:opacity-100 transition-opacity dark:hover:bg-danger-900/20"
                     disabled={isDeleting === previous.id}
+                    aria-busy={isDeleting === previous.id}
                     onClick={(e) => handleDeleteLink(e, previous.id)}
                   >
-                    <Trash2 className="h-4 w-4" />
+                    {isDeleting === previous.id ? <Loader2 className="h-4 w-4 animate-spin" /> : <Trash2 className="h-4 w-4" />}
                   </Button>
                   <ChevronRight className="h-4 w-4 shrink-0 text-surface-300 transition-transform group-hover:translate-x-1 dark:text-surface-600" />
                 </div>
@@ -153,7 +185,7 @@ export function MeetingLinksPanel({ meeting, onRefresh }: MeetingLinksPanelProps
                 />
               </div>
               {selectedPrev && (
-                <Button size="sm" onClick={() => handleLinkPrevious(selectedPrev)}>Bağla</Button>
+                <Button size="sm" isLoading={isLinking} onClick={() => handleLinkPrevious(selectedPrev)}>Bağla</Button>
               )}
             </div>
           )}
@@ -165,7 +197,7 @@ export function MeetingLinksPanel({ meeting, onRefresh }: MeetingLinksPanelProps
           {following.length > 0 ? (
             <div className="space-y-2 mb-4">
               {following.map((child: any) => (
-                <Card key={child.id} hoverable onClick={() => navigate(`/meetings/${child.linkedMeetingId}`)} className="group">
+                <Card key={child.id} hoverable onClick={() => navigate(`/meetings/${child.linkedMeetingId}`, { state: navFrom })} className="group">
                   <CardContent className="flex items-center gap-3">
                     <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg bg-brand-50 text-brand-600 dark:bg-brand-950/50 dark:text-brand-400">
                       <ArrowRight className="h-4 w-4" />
@@ -181,9 +213,10 @@ export function MeetingLinksPanel({ meeting, onRefresh }: MeetingLinksPanelProps
                         size="sm" 
                         className="h-8 w-8 p-0 text-surface-400 hover:text-danger-600 hover:bg-danger-50 opacity-0 group-hover:opacity-100 transition-opacity dark:hover:bg-danger-900/20"
                         disabled={isDeleting === child.id}
+                        aria-busy={isDeleting === child.id}
                         onClick={(e) => handleDeleteLink(e, child.id)}
                       >
-                        <Trash2 className="h-4 w-4" />
+                        {isDeleting === child.id ? <Loader2 className="h-4 w-4 animate-spin" /> : <Trash2 className="h-4 w-4" />}
                       </Button>
                       <ChevronRight className="h-4 w-4 shrink-0 text-surface-300 transition-transform group-hover:translate-x-1 dark:text-surface-600" />
                     </div>
@@ -192,7 +225,14 @@ export function MeetingLinksPanel({ meeting, onRefresh }: MeetingLinksPanelProps
               ))}
             </div>
           ) : (
-            <p className="text-sm text-surface-400 dark:text-surface-500 mb-4">Henüz bağlı bir devam veya takip toplantısı yok.</p>
+            <div className="mb-4 rounded-lg border border-dashed border-surface-200 dark:border-surface-700">
+              <EmptyState
+                compact
+                icon={<GitBranch className="h-6 w-6" />}
+                message="Bağlı toplantı yok"
+                description="Henüz bağlı bir devam veya takip toplantısı bulunmuyor."
+              />
+            </div>
           )}
 
           {!isAddingChild ? (
@@ -236,8 +276,8 @@ export function MeetingLinksPanel({ meeting, onRefresh }: MeetingLinksPanelProps
                   />
                 </div>
                 <div className="flex gap-1">
-                  <Button size="sm" onClick={handleLinkChild} disabled={!selectedChild}>Ekle</Button>
-                  <Button size="sm" variant="ghost" onClick={() => {
+                  <Button size="sm" onClick={handleLinkChild} disabled={!selectedChild} isLoading={isLinking}>Ekle</Button>
+                  <Button size="sm" variant="ghost" disabled={isLinking} onClick={() => {
                     setIsAddingChild(false);
                     setSelectedChild(null);
                   }}>İptal</Button>

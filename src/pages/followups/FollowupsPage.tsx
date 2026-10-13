@@ -1,6 +1,7 @@
-import { useState, useMemo, useEffect, useCallback } from "react";
+import { useEffect, useMemo } from "react";
 import { ClipboardCheck, AlertTriangle, Clock, CheckCircle2, CalendarClock, Filter, Loader2 } from "lucide-react";
 import { Badge } from "@/shared/ui/Badge";
+import { Select } from "@/shared/ui/Select";
 import { Button } from "@/shared/ui/Button";
 import { SearchBar } from "@/shared/ui/SearchBar";
 import { EmptyState } from "@/shared/ui/EmptyState";
@@ -14,11 +15,13 @@ import {
   type ActionStatus,
 } from "@/shared/config/constants";
 import type { FollowupItem } from "@/entities/followup/model";
-import { FollowupDetailModal } from "@/features/followup/FollowupDetailModal";
-import { fetchFollowups, updateFollowup } from "@/services/followupService";
-import type { FollowupItemDto } from "@/types/api";
+import { FollowupDetailModal, DETAIL_TABS, type DetailTab } from "@/features/followup/FollowupDetailModal";
+import { parseItemCode, useUrlParams } from "@/shared/lib/navigation";
+import { useFollowups, useUpdateFollowup } from "@/entities/followup/api/queries";
+import type { FollowupItemDto, UpdateFollowupRequest } from "@/types/api";
+import { toast } from "sonner";
 
-const BUCKET_ORDER: FollowupBucket[] = ["OVERDUE", "TODAY", "SOON", "LATER", "NO_DATE", "CLOSED"];
+const BUCKET_ORDER: FollowupBucket[] = ["OVERDUE", "TODAY", "SOON", "LATER", "CLOSED"];
 const BUCKET_ICONS: Record<FollowupBucket, React.ReactNode> = {
   OVERDUE: <AlertTriangle className="h-4 w-4" />,
   TODAY: <Clock className="h-4 w-4" />,
@@ -26,14 +29,6 @@ const BUCKET_ICONS: Record<FollowupBucket, React.ReactNode> = {
   LATER: <CalendarClock className="h-4 w-4" />,
   NO_DATE: <Filter className="h-4 w-4" />,
   CLOSED: <CheckCircle2 className="h-4 w-4" />,
-};
-
-const STATUS_BADGE_VARIANT: Record<ActionStatus, "primary" | "warning" | "success" | "default"> = {
-  OPEN: "primary",
-  IN_PROGRESS: "warning",
-  DONE: "success",
-  CANCELLED: "default",
-  ROLLED_OVER: "default",
 };
 
 /** Compute bucket from dueDate + status */
@@ -68,28 +63,44 @@ function toFollowup(dto: FollowupItemDto): FollowupItem {
 }
 
 export function FollowupsPage() {
-  const [search, setSearch] = useState("");
-  const [activeBucket, setActiveBucket] = useState<FollowupBucket | "ALL">("ALL");
-  const [selectedItem, setSelectedItem] = useState<FollowupItem | null>(null);
-  const [followups, setFollowups] = useState<FollowupItem[]>([]);
-  const [isLoading, setIsLoading] = useState(true);
-  const [error, setError] = useState<string | null>(null);
+  // Sayfa durumu URL'de tutulur: /followups?item=12&tab=minutes&bucket=OVERDUE&q=erp
+  // → toplantıya gidip "Geri" ile dönüldüğünde modal, sekme ve filtreler aynen geri gelir; link paylaşılabilir.
+  const { params, update } = useUrlParams();
+  const search = params.get("q") ?? "";
+  const bucketParam = params.get("bucket");
+  const activeBucket: FollowupBucket | "ALL" =
+    bucketParam && (BUCKET_ORDER as string[]).includes(bucketParam) ? (bucketParam as FollowupBucket) : "ALL";
+  const selectedId = parseItemCode(params.get("item"));
+  const tabParam = params.get("tab");
+  const modalTab: DetailTab = tabParam && (DETAIL_TABS as readonly string[]).includes(tabParam) ? (tabParam as DetailTab) : "subject";
 
-  const loadFollowups = useCallback(async () => {
-    try {
-      setIsLoading(true);
-      setError(null);
-      const data = await fetchFollowups();
-      setFollowups(data.map(toFollowup));
-    } catch (err) {
-      console.error("[FollowupsPage] Load error:", err);
-      setError("Takip konuları yüklenirken hata oluştu.");
-    } finally {
-      setIsLoading(false);
+  const setSearch = (value: string) => update({ q: value });
+  const setActiveBucket = (bucket: FollowupBucket | "ALL") => update({ bucket: bucket === "ALL" ? null : bucket });
+  const openItem = (id: number) => update({ item: id, tab: null });
+  const closeItem = () => update({ item: null, tab: null });
+
+  // React Query: toplantıda not/termin değişince veya başka sekmede güncellenince
+  // `followupKeys` merkezi köprü tarafından geçersiz kılınır → liste arka planda tazelenir.
+  const followupsQuery = useFollowups();
+  const updateMutation = useUpdateFollowup();
+  const followups = useMemo<FollowupItem[]>(() => (followupsQuery.data ?? []).map(toFollowup), [followupsQuery.data]);
+  const isLoading = followupsQuery.isPending;
+  const error = followupsQuery.isError ? "Takip konuları yüklenirken hata oluştu." : null;
+  const loadFollowups = () => void followupsQuery.refetch();
+  // Modal her zaman önbellekteki en güncel kaydı gösterir
+  const selectedItem = useMemo(() => followups.find((f) => f.id === selectedId) ?? null, [followups, selectedId]);
+  const updatingId = updateMutation.isPending ? updateMutation.variables?.id ?? null : null;
+
+  // Derin bağlantı koruması: URL'deki madde yoksa (silinmiş / geçersiz kod) bildir ve parametreyi temizle
+  const itemParam = params.get("item");
+  useEffect(() => {
+    if (!itemParam || followupsQuery.isPending || followupsQuery.isError) return;
+    if (selectedId === null || !followups.some((f) => f.id === selectedId)) {
+      toast.warning("Takip konusu bulunamadı", { description: `${itemParam} silinmiş veya erişiminiz yok.` });
+      closeItem();
     }
-  }, []);
-
-  useEffect(() => { loadFollowups(); }, [loadFollowups]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [itemParam, selectedId, followupsQuery.isPending, followupsQuery.isError, followups]);
 
   const filtered = useMemo(() => {
     const needle = search.toLowerCase();
@@ -114,23 +125,35 @@ export function FollowupsPage() {
   const totalActive = followups.filter((f) => f.bucket !== "CLOSED").length;
   const overdue = followups.filter((f) => f.bucket === "OVERDUE").length;
 
-  async function handleUpdate(id: number, updates: Partial<FollowupItem>) {
+  async function handleUpdate(id: number, updates: Partial<FollowupItem>): Promise<boolean> {
+    const current = followups.find((f) => f.id === id);
+    if (!current || updatingId !== null) return false;
+
+    // PUT uç noktası tam DTO bekler → mevcut kaydı değişikliklerle birleştir
+    const merged = { ...current, ...updates };
+    const request: UpdateFollowupRequest = {
+      text: merged.text,
+      topicId: merged.topicId ?? undefined,
+      responsiblePersonId: merged.responsiblePersonId ?? undefined,
+      responsibleCompanyId: merged.responsibleCompanyId ?? undefined,
+      dueDate: merged.dueDate ?? undefined,
+      actionStatus: merged.actionStatus,
+      completedOn: merged.completedOn ?? undefined,
+      waitingReason: merged.waitingReason || undefined,
+      developmentNote: merged.developmentNote || undefined,
+      dependencyItemIds: merged.dependencyItemIds ?? [],
+    };
+
     try {
-      const updatedItem = await updateFollowup(id, updates as any);
-      setFollowups((prev) => prev.map((f) => (f.id === id ? (updatedItem as unknown as FollowupItem) : f)));
-      if (selectedItem?.id === id) {
-        setSelectedItem(updatedItem as unknown as FollowupItem);
-      }
-      await loadFollowups();
-    } catch (err) {
+      // İyimser: liste anında güncellenir (kova/bucket dahil), hata olursa hook eski hale döndürür
+      await updateMutation.mutateAsync({ id, request });
+      toast.success("Takip maddesi güncellendi");
+      return true;
+    } catch (err: any) {
       console.error("[FollowupsPage] Update error:", err);
-      // Fallback to local
-      setFollowups((prev) =>
-        prev.map((f) => (f.id === id ? { ...f, ...updates } : f))
-      );
-      if (selectedItem?.id === id) {
-        setSelectedItem((prev) => prev ? { ...prev, ...updates } : null);
-      }
+      const msg = err?.response?.data?.message ?? err?.response?.data?.title;
+      toast.error("Güncelleme başarısız", { description: typeof msg === "string" ? msg : "Değişiklik geri alındı." });
+      return false;
     }
   }
 
@@ -180,7 +203,7 @@ export function FollowupsPage() {
       {error && !isLoading && (
         <div className="rounded-lg border border-danger-200 bg-danger-50 p-4 text-center dark:bg-danger-950/20 dark:border-danger-800">
           <p className="text-danger-700 dark:text-danger-300">{error}</p>
-          <Button variant="outline" className="mt-3" onClick={loadFollowups}>Yeniden Dene</Button>
+          <Button variant="outline" className="mt-3" onClick={() => loadFollowups()}>Yeniden Dene</Button>
         </div>
       )}
 
@@ -201,19 +224,19 @@ export function FollowupsPage() {
                   <table className="w-full text-sm">
                     <thead>
                       <tr className="border-b border-surface-200 dark:border-surface-700">
-                        <th className="px-4 py-2.5 text-left font-medium text-surface-500 dark:text-surface-400">Kaynak</th>
-                        <th className="px-4 py-2.5 text-left font-medium text-surface-500 dark:text-surface-400">Toplantı</th>
-                        <th className="px-4 py-2.5 text-left font-medium text-surface-500 dark:text-surface-400">Konu</th>
-                        <th className="px-4 py-2.5 text-left font-medium text-surface-500 dark:text-surface-400">Sorumlu</th>
-                        <th className="px-4 py-2.5 text-left font-medium text-surface-500 dark:text-surface-400">Termin</th>
-                        <th className="px-4 py-2.5 text-left font-medium text-surface-500 dark:text-surface-400">Durum</th>
+                        <th className="px-4 py-2.5 text-left font-bold text-surface-600 dark:text-surface-400">Kaynak</th>
+                        <th className="px-4 py-2.5 text-left font-bold text-surface-600 dark:text-surface-400">Toplantı</th>
+                        <th className="px-4 py-2.5 text-left font-bold text-surface-600 dark:text-surface-400">Konu</th>
+                        <th className="px-4 py-2.5 text-left font-bold text-surface-600 dark:text-surface-400">Sorumlu</th>
+                        <th className="px-4 py-2.5 text-left font-bold text-surface-600 dark:text-surface-400">Termin</th>
+                        <th className="px-4 py-2.5 text-left font-bold text-surface-600 dark:text-surface-400">Durum</th>
                       </tr>
                     </thead>
                     <tbody>
                       {items.map((item) => (
                         <tr
                           key={item.id}
-                          onClick={() => setSelectedItem(item)}
+                          onClick={() => openItem(item.id)}
                           className="cursor-pointer border-b border-surface-100 transition-colors hover:bg-surface-50 dark:border-surface-700/50 dark:hover:bg-surface-700/30 last:border-0"
                         >
                           <td className="px-4 py-3 text-surface-600 dark:text-surface-400 max-w-[180px] truncate">
@@ -232,9 +255,17 @@ export function FollowupsPage() {
                             {item.dueDate ? formatDate(item.dueDate, "short") : "—"}
                           </td>
                           <td className="px-4 py-3">
-                            <Badge variant={STATUS_BADGE_VARIANT[item.actionStatus]} size="sm">
-                              {ACTION_STATUS_LABEL[item.actionStatus]}
-                            </Badge>
+                            <div onClick={(e) => e.stopPropagation()} className="flex items-center gap-2">
+                              <Select
+                                value={item.actionStatus}
+                                disabled={updatingId === item.id}
+                                aria-busy={updatingId === item.id}
+                                onChange={(e) => handleUpdate(item.id, { actionStatus: e.target.value as ActionStatus })}
+                                options={Object.entries(ACTION_STATUS_LABEL).map(([val, label]) => ({ value: val, label }))}
+                                className="h-8 text-xs !py-1 !px-2 w-[120px]"
+                              />
+                              {updatingId === item.id && <Loader2 className="h-4 w-4 animate-spin text-brand-500" />}
+                            </div>
                           </td>
                         </tr>
                       ))}
@@ -250,9 +281,11 @@ export function FollowupsPage() {
       {/* Detail modal */}
       <FollowupDetailModal
         isOpen={!!selectedItem}
-        onClose={() => setSelectedItem(null)}
+        onClose={closeItem}
         item={selectedItem}
         onUpdate={handleUpdate}
+        activeTab={modalTab}
+        onTabChange={(tab) => update({ tab: tab === "subject" ? null : tab })}
       />
     </div>
   );

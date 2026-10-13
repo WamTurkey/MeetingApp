@@ -1,4 +1,5 @@
 import { useNavigate } from "react-router-dom";
+import { useNavFrom } from "@/shared/lib/navigation";
 import { ChevronRight } from "lucide-react";
 import { Card, CardContent } from "@/shared/ui/Card";
 import { MeetingStatusBadge } from "@/entities/meeting/ui/MeetingStatusBadge";
@@ -11,11 +12,12 @@ interface MeetingCardProps {
 
 export function MeetingCard({ meeting }: MeetingCardProps) {
   const navigate = useNavigate();
+  const navFrom = useNavFrom(); // etiket bulunduğu sayfadan (Dashboard / Toplantılar…) türetilir
 
   return (
     <Card
       hoverable
-      onClick={() => navigate(`/meetings/${meeting.id}`)}
+      onClick={() => navigate(`/meetings/${meeting.id}`, { state: navFrom })}
       className="group"
     >
       <CardContent className="flex items-start justify-between gap-4">

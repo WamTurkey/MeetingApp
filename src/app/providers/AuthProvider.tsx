@@ -16,6 +16,8 @@ import {
   getStoredToken,
   type RegisterRequest,
 } from "@/services/authService";
+import { AUTH_UNAUTHORIZED_EVENT } from "@/services/apiClient";
+import { queryClient } from "@/shared/api/queryClient";
 
 interface AuthContextValue {
   user: User | null;
@@ -33,6 +35,16 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const [user, setUser] = useState<User | null>(null);
   const [isLoading, setIsLoading] = useState(true); // true initially — checking token
   const [error, setError] = useState<string | null>(null);
+
+  // ──────────── 401 Interceptor köprüsü: oturum düştüğünde state'i temizle ────────────
+  useEffect(() => {
+    const onUnauthorized = () => {
+      apiLogout();
+      setUser(null);
+    };
+    window.addEventListener(AUTH_UNAUTHORIZED_EVENT, onUnauthorized);
+    return () => window.removeEventListener(AUTH_UNAUTHORIZED_EVENT, onUnauthorized);
+  }, []);
 
   // ──────────── On mount: check stored token ────────────
   useEffect(() => {
@@ -123,6 +135,9 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   // ──────────── Logout ────────────
   const logout = useCallback(() => {
     apiLogout();
+    // Kullanıcıya özel önbellek bir sonraki oturuma taşınmasın
+    queryClient.cancelQueries();
+    queryClient.clear();
     setUser(null);
     setError(null);
   }, []);

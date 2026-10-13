@@ -252,6 +252,7 @@ public class MeetingDbContext : DbContext
             e.Property(x => x.RelationType).HasMaxLength(20);
             e.Property(x => x.CreatedAt).HasDefaultValueSql("SYSUTCDATETIME()");
             e.HasIndex(x => new { x.ParentMeetingId, x.ChildMeetingId }).IsUnique();
+            e.HasQueryFilter(x => !x.ParentMeeting.IsDeleted && !x.ChildMeeting.IsDeleted);
 
             e.HasOne(x => x.ParentMeeting).WithMany(m => m.ParentLinks).HasForeignKey(x => x.ParentMeetingId).OnDelete(DeleteBehavior.Restrict);
             e.HasOne(x => x.ChildMeeting).WithMany(m => m.ChildLinks).HasForeignKey(x => x.ChildMeetingId).OnDelete(DeleteBehavior.Restrict);
@@ -268,6 +269,7 @@ public class MeetingDbContext : DbContext
             e.Property(x => x.CreatedAt).HasDefaultValueSql("SYSUTCDATETIME()");
             e.Property(x => x.UpdatedAt).HasDefaultValueSql("SYSUTCDATETIME()");
             e.HasIndex(x => new { x.MeetingId, x.PersonId }).IsUnique();
+            e.HasQueryFilter(x => !x.Meeting.IsDeleted);
 
             e.HasOne(x => x.Meeting).WithMany(m => m.Participants).HasForeignKey(x => x.MeetingId).OnDelete(DeleteBehavior.Cascade);
             e.HasOne(x => x.Person).WithMany(p => p.MeetingParticipants).HasForeignKey(x => x.PersonId).OnDelete(DeleteBehavior.Restrict);
@@ -323,6 +325,7 @@ public class MeetingDbContext : DbContext
         {
             e.ToTable("FollowupItemDependencies");
             e.HasKey(x => x.Id);
+            e.HasQueryFilter(x => !x.Item.IsDeleted && !x.DependsOnItem.IsDeleted);
             
             e.HasOne(x => x.Item)
              .WithMany(f => f.DependentOn)
@@ -346,6 +349,7 @@ public class MeetingDbContext : DbContext
             e.Property(x => x.NewValue).HasMaxLength(500);
             e.Property(x => x.Description).HasMaxLength(500);
             e.Property(x => x.ChangedAt).HasDefaultValueSql("SYSUTCDATETIME()");
+            e.HasQueryFilter(x => !x.Followup.IsDeleted);
 
             e.HasOne(x => x.Followup).WithMany(f => f.ChangeLogs).HasForeignKey(x => x.FollowupId).OnDelete(DeleteBehavior.Cascade);
             e.HasOne(x => x.ActionNavigation).WithMany(a => a.FollowupChangeLogs).HasForeignKey(x => x.Action).OnDelete(DeleteBehavior.Restrict);

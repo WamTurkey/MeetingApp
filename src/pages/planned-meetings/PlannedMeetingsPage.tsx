@@ -1,6 +1,8 @@
-import { useMemo, useState, useEffect, useCallback } from "react";
+import { useMemo, useState } from "react";
 import { useNavigate } from "react-router-dom";
+import { useNavFrom } from "@/shared/lib/navigation";
 import { CalendarDays, ChevronRight, Clock, Plus, Loader2 } from "lucide-react";
+import { useMeetingsList } from "@/entities/meeting/api/queries";
 import { Button } from "@/shared/ui/Button";
 import { SearchBar } from "@/shared/ui/SearchBar";
 import { Card, CardContent } from "@/shared/ui/Card";
@@ -8,26 +10,18 @@ import { Badge } from "@/shared/ui/Badge";
 import { CreateMeetingModal } from "@/features/create-meeting";
 import { EmptyState } from "@/shared/ui/EmptyState";
 import { formatDate } from "@/shared/lib/formatDate";
-import { fetchMeetings, createMeeting } from "@/services/meetingService";
+import { useCreateMeeting } from "@/entities/meeting/api/mutations";
 import type { MeetingListItem, CreateMeetingRequest } from "@/types/api";
 
 export function PlannedMeetingsPage() {
+  const { mutateAsync: createMeeting } = useCreateMeeting();
   const navigate = useNavigate();
+  const navFrom = useNavFrom("Planlı Toplantılar");
   const [search, setSearch] = useState("");
   const [showCreate, setShowCreate] = useState(false);
-  const [meetings, setMeetings] = useState<MeetingListItem[]>([]);
-  const [isLoading, setIsLoading] = useState(true);
-
-  const loadDrafts = useCallback(async () => {
-    try {
-      setIsLoading(true);
-      const data = await fetchMeetings({ status: "DRAFT", pageSize: 100 });
-      setMeetings(data.items);
-    } catch (err) { console.error("[PlannedMeetings]", err); }
-    finally { setIsLoading(false); }
-  }, []);
-
-  useEffect(() => { loadDrafts(); }, [loadDrafts]);
+  const draftsQuery = useMeetingsList({ status: "DRAFT", pageSize: 100 });
+  const meetings: MeetingListItem[] = useMemo(() => draftsQuery.data?.items ?? [], [draftsQuery.data]);
+  const isLoading = draftsQuery.isPending;
 
   async function handleCreate(payload: Record<string, unknown>) {
     try {
@@ -36,9 +30,8 @@ export function PlannedMeetingsPage() {
         description: (payload.subject as string) || "",
         meetingDate: (payload.meetingDate as string) || new Date().toISOString().slice(0, 10),
       };
-      await createMeeting(dto);
+      await createMeeting(dto); // useCreateMeeting → liste anında tazelenir
       setShowCreate(false);
-      await loadDrafts();
     } catch (err) { console.error("[PlannedMeetings] Create error:", err); }
   }
 
@@ -72,7 +65,7 @@ export function PlannedMeetingsPage() {
       ) : (
         <div className="space-y-3">
           {planned.map((m) => (
-            <Card key={m.id} hoverable onClick={() => navigate(`/meetings/${m.id}`)} className="group">
+            <Card key={m.id} hoverable onClick={() => navigate(`/meetings/${m.id}`, { state: navFrom })} className="group">
               <CardContent className="flex items-center gap-4">
                 <div className="flex h-12 w-12 shrink-0 items-center justify-center rounded-xl bg-brand-50 text-brand-600 dark:bg-brand-950/50 dark:text-brand-400">
                   <CalendarDays className="h-6 w-6" />

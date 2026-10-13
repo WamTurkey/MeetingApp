@@ -1,11 +1,13 @@
-import { useState, useMemo, useEffect, useCallback } from "react";
+import { useState, useMemo } from "react";
+import { useDebounce } from "@/shared/hooks/useDebounce";
 import { Plus, Loader2 } from "lucide-react";
+import { useMeetingsList } from "@/entities/meeting/api/queries";
 import { Button } from "@/shared/ui/Button";
 import { EmptyState } from "@/shared/ui/EmptyState";
 import { MeetingCard } from "@/widgets/meeting-card/MeetingCard";
 import { MeetingFilterBar, INITIAL_FILTERS, type MeetingFilters } from "@/features/meeting/MeetingFilterBar";
 import { CreateMeetingModal } from "@/features/create-meeting";
-import { fetchMeetings, createMeeting } from "@/services/meetingService";
+import { useCreateMeeting } from "@/entities/meeting/api/mutations";
 import type { Meeting } from "@/entities/meeting/model";
 import { toast } from "sonner";
 import type { MeetingListItem, CreateMeetingRequest } from "@/types/api";
@@ -33,32 +35,22 @@ function toMeeting(item: MeetingListItem): Meeting {
 }
 
 export function MeetingsListPage() {
-  const [meetings, setMeetings] = useState<Meeting[]>([]);
+  const { mutateAsync: createMeeting } = useCreateMeeting();
   const [filters, setFilters] = useState<MeetingFilters>(INITIAL_FILTERS);
   const [showCreate, setShowCreate] = useState(false);
-  const [isLoading, setIsLoading] = useState(true);
-  const [error, setError] = useState<string | null>(null);
+  // Her tuş vuruşunda istek atılmasın
+  const debouncedSearch = useDebounce(filters.search, 300);
 
-  const loadMeetings = useCallback(async () => {
-    try {
-      setIsLoading(true);
-      setError(null);
-      const data = await fetchMeetings({
-        status: filters.status || undefined,
-        search: filters.search || undefined,
-      });
-      setMeetings(data.items.map(toMeeting));
-    } catch (err) {
-      console.error("[MeetingsListPage] API Error:", err);
-      setError("Toplantılar yüklenirken bir hata oluştu. API sunucusunun çalıştığından emin olun.");
-    } finally {
-      setIsLoading(false);
-    }
-  }, [filters.status, filters.search]);
-
-  useEffect(() => {
-    loadMeetings();
-  }, [loadMeetings]);
+  const meetingsQuery = useMeetingsList({
+    status: filters.status || undefined,
+    search: debouncedSearch || undefined,
+  });
+  const meetings = useMemo<Meeting[]>(() => meetingsQuery.data?.items.map(toMeeting) ?? [], [meetingsQuery.data]);
+  const isLoading = meetingsQuery.isPending;
+  const error = meetingsQuery.isError
+    ? "Toplantılar yüklenirken bir hata oluştu. API sunucusunun çalıştığından emin olun."
+    : null;
+  const loadMeetings = () => void meetingsQuery.refetch();
 
   const filteredMeetings = useMemo(() => {
     return meetings.filter((m) => {
@@ -82,8 +74,7 @@ export function MeetingsListPage() {
       };
       await createMeeting(dto);
       setShowCreate(false);
-      toast.success("Toplantı başarıyla oluşturuldu");
-      await loadMeetings();
+      toast.success("Toplantı başarıyla oluşturuldu"); // liste useCreateMeeting ile tazelenir
     } catch (err) {
       console.error("[MeetingsListPage] Create Error:", err);
       toast.error("Toplantı oluşturulamadı");
@@ -126,7 +117,7 @@ export function MeetingsListPage() {
       {error && !isLoading && (
         <div className="rounded-lg border border-danger-200 bg-danger-50 p-6 text-center dark:bg-danger-950/20 dark:border-danger-800">
           <p className="text-danger-700 dark:text-danger-300">{error}</p>
-          <Button variant="outline" className="mt-4" onClick={loadMeetings}>
+          <Button variant="outline" className="mt-4" onClick={() => loadMeetings()}>
             Yeniden Dene
           </Button>
         </div>

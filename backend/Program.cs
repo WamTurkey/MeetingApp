@@ -48,14 +48,28 @@ builder.Services.AddAuthentication(options =>
     };
 });
 
-builder.Services.AddAuthorization();
+// Varsayılan politika: [AllowAnonymous] işaretli olmayan TÜM uç noktalar geçerli JWT ister.
+// (Önceden iş controller'larında [Authorize] yoktu → token'sız erişim mümkündü ve 401 interceptor hiç tetiklenmiyordu.)
+builder.Services.AddAuthorization(options =>
+{
+    options.FallbackPolicy = new Microsoft.AspNetCore.Authorization.AuthorizationPolicyBuilder()
+        .RequireAuthenticatedUser()
+        .Build();
+});
 
 // ──────────── CORS — React frontend için ─────────────────────────
 builder.Services.AddCors(options =>
 {
     options.AddPolicy("AllowFrontend", policy =>
     {
-        policy.WithOrigins("http://localhost:3000", "http://localhost:5173")
+        // Development: Vite port değiştirse bile (3000 doluysa 3001, 3002…) tüm localhost portlarına izin ver.
+        // Production: yalnızca "Cors:AllowedOrigins" ayarındaki (yoksa varsayılan) adresler.
+        var allowedOrigins = builder.Configuration.GetSection("Cors:AllowedOrigins").Get<string[]>()
+                             ?? new[] { "http://localhost:3000", "http://localhost:5173" };
+        policy.SetIsOriginAllowed(origin =>
+                  builder.Environment.IsDevelopment()
+                      ? Uri.TryCreate(origin, UriKind.Absolute, out var uri) && (uri.IsLoopback || uri.Host == "localhost")
+                      : allowedOrigins.Contains(origin, StringComparer.OrdinalIgnoreCase))
               .AllowAnyHeader()
               .AllowAnyMethod()
               .AllowCredentials();
@@ -152,9 +166,14 @@ using (var scope = app.Services.CreateScope())
                 (N'İş Geliştirme Uzmanı'),(N'Satış Müdürü'),(N'Kalite Sorumlusu'),(N'İK Uzmanı'),
                 (N'Mali İşler Müdürü'),(N'Muhasebe Sorumlusu'),(N'Hukuk Müşaviri'),(N'Danışman'),(N'Stajyer'),(N'Diğer')");
                 db.Database.ExecuteSqlRaw("UPDATE [dbo].[Users] SET [Role] = 'Admin' WHERE [Email] = 'admin@wam.com.tr' AND [Role] = 'User'");
-        // Reset admin password to admin123
-        var hash = BCrypt.Net.BCrypt.HashPassword("admin123");
-        db.Database.ExecuteSqlRaw($"UPDATE [dbo].[Users] SET [HashedPassword] = '{hash}' WHERE [Email] = 'admin@wam.com.tr'");
+        // Reset admin password to admin123 — YALNIZCA Development ortamında.
+        // Production'da her açılışta admin şifresinin sıfırlanması kritik güvenlik açığıdır.
+        if (app.Environment.IsDevelopment())
+        {
+            var hash = BCrypt.Net.BCrypt.HashPassword("admin123");
+            // ExecuteSql (FormattableString) → değer SQL parametresi olarak gönderilir (EF1002 / SQL injection koruması)
+            db.Database.ExecuteSql($"UPDATE [dbo].[Users] SET [HashedPassword] = {hash} WHERE [Email] = 'admin@wam.com.tr'");
+        }
 
         // ──── FirmType kolonu ────
         db.Database.ExecuteSqlRaw(@"

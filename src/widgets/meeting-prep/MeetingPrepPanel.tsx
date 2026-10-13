@@ -1,11 +1,12 @@
-import { useState, useEffect } from "react";
+import { useState } from "react";
+import { useMeetingPrep } from "@/entities/meeting/api/queries";
 import { FileCheck, ClipboardList, ArrowDownToLine, Loader2 } from "lucide-react";
 import { Card, CardContent } from "@/shared/ui/Card";
 import { Badge } from "@/shared/ui/Badge";
 import { Button } from "@/shared/ui/Button";
 import { EmptyState } from "@/shared/ui/EmptyState";
 import { toast } from "sonner";
-import apiClient from "@/services/apiClient";
+import { useRolloverItems } from "@/entities/meeting/api/mutations";
 
 interface MeetingPrepPanelProps {
   meetingId: number;
@@ -13,27 +14,13 @@ interface MeetingPrepPanelProps {
 }
 
 export function MeetingPrepPanel({ meetingId, onRefresh }: MeetingPrepPanelProps) {
-  const [items, setItems] = useState<any[]>([]);
-  const [loading, setLoading] = useState(true);
+  // Önceki toplantılardan devredilebilecek açık maddeler — takip maddesi değişince köprü tarafından tazelenir
+  const prepQuery = useMeetingPrep<any>(meetingId);
+  const items: any[] = prepQuery.data ?? [];
+  const loading = prepQuery.isPending;
   const [selectedIds, setSelectedIds] = useState<Set<number>>(new Set());
   const [isSubmitting, setIsSubmitting] = useState(false);
-
-  const loadItems = async () => {
-    try {
-      setLoading(true);
-      const { data } = await apiClient.get(`/Meetings/${meetingId}/preparation`);
-      setItems(data);
-      setSelectedIds(new Set()); // Reset selections
-    } catch (error) {
-      console.error(error);
-    } finally {
-      setLoading(false);
-    }
-  };
-
-  useEffect(() => {
-    loadItems();
-  }, [meetingId]);
+  const rollover = useRolloverItems(meetingId);
 
   const toggleSelect = (id: number) => {
     const next = new Set(selectedIds);
@@ -47,10 +34,11 @@ export function MeetingPrepPanel({ meetingId, onRefresh }: MeetingPrepPanelProps
     try {
       setIsSubmitting(true);
       const idsArray = Array.from(selectedIds);
-      await apiClient.post(`/Meetings/${meetingId}/rollover-items`, idsArray);
+      // Hook başarıda hazırlık listesi + kaynak toplantılar + Takip & Terminler'i tazeler
+      await rollover.mutateAsync(idsArray);
       toast.success("Maddeler başarıyla yeni toplantıya aktarıldı.");
-      await loadItems(); // Refresh the preparation list to remove rolled-over items
-      if (onRefresh) onRefresh(); // Refresh parent (Notes & Followups tab)
+      setSelectedIds(new Set());
+      if (onRefresh) onRefresh();
     } catch (error) {
       toast.error("Maddeler aktarılırken bir hata oluştu.");
       console.error(error);

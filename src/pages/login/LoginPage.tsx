@@ -1,5 +1,5 @@
 import { type FormEvent, useState } from "react";
-import { useNavigate } from "react-router-dom";
+import { useLocation, useNavigate } from "react-router-dom";
 import { Mail, Lock, LogIn, Shield, Users, FileText } from "lucide-react";
 import { useAuth } from "@/app/providers/AuthProvider";
 import { APP_NAME } from "@/shared/config/constants";
@@ -7,6 +7,10 @@ import { APP_NAME } from "@/shared/config/constants";
 export function LoginPage() {
   const { login, isLoading, error } = useAuth();
   const navigate = useNavigate();
+  // RequireAuth → state.from: oturum süresi dolup tekrar giriş yapan kullanıcı kaldığı sayfaya döner
+  const fromState = (useLocation().state as { from?: { pathname?: string; search?: string } } | null)?.from;
+  const returnTo =
+    fromState?.pathname && fromState.pathname !== "/login" ? `${fromState.pathname}${fromState.search ?? ""}` : "/";
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [errors, setErrors] = useState<{ email?: string; password?: string }>({});
@@ -26,7 +30,7 @@ export function LoginPage() {
     if (!validate()) return;
     try {
       await login({ email: email.trim().toLowerCase(), password });
-      navigate("/", { replace: true });
+      navigate(returnTo, { replace: true });
     } catch {
       // error handled by AuthProvider
     }

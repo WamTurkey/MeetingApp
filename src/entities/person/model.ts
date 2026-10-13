@@ -8,6 +8,8 @@ export interface Person extends BaseEntity {
   email: string;
   phone: string;
   isActive: boolean;
+  /** Katalogdaki kişinin eşleştiği sistem kullanıcısı (Users.Id) */
+  linkedUserId: number | null;
 }
 
 export interface PersonCreatePayload {
@@ -16,4 +18,5 @@ export interface PersonCreatePayload {
   title?: string;
   email?: string;
   phone?: string;
+  linkedUserId?: number | null;
 }

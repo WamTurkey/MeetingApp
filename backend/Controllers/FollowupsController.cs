@@ -3,6 +3,7 @@ using Microsoft.EntityFrameworkCore;
 using MeetingApp.API.Data;
 using MeetingApp.API.DTOs;
 using MeetingApp.API.Models.Business;
+using MeetingApp.API.Services;
 
 namespace MeetingApp.API.Controllers;
 
@@ -92,7 +93,7 @@ public class FollowupsController : ControllerBase
             DueDate = !string.IsNullOrEmpty(dto.DueDate) ? DateOnly.Parse(dto.DueDate) : null,
             WaitingReason = dto.WaitingReason, DevelopmentNote = dto.DevelopmentNote,
             SourceMeetingId = dto.SourceMeetingId, SourceNoteId = dto.SourceNoteId,
-            ActionStatus = dto.ActionStatus ?? "OPEN",
+            ActionStatus = NoteFollowupSync.NormalizeStatus(dto.ActionStatus),
             CreatedBy = 1
         };
         _db.FollowupItems.Add(item);
@@ -216,6 +217,9 @@ public class FollowupsController : ControllerBase
 
         f.UpdatedBy = 1; f.UpdatedAt = DateTime.UtcNow; f.Version++;
 
+        // Takip → Not senkronu: termin / durum / sorumlu kaynak notla aynı kalsın
+        await NoteFollowupSync.SyncToNoteAsync(_db, f);
+
         await _db.SaveChangesAsync();
         return Ok(await GetByIdInternal(id));
     }
@@ -226,6 +230,12 @@ public class FollowupsController : ControllerBase
         var f = await _db.FollowupItems.FindAsync(id);
         if (f == null) return NotFound();
         f.IsDeleted = true; f.DeletedAt = DateTime.UtcNow; f.DeletedBy = 1;
+        // Kaynak notun durumu da iptal olarak işaretlenir (iki tablo arasında çelişki kalmasın)
+        if (f.SourceNoteId.HasValue)
+        {
+            var note = await _db.Notes.FirstOrDefaultAsync(n => n.Id == f.SourceNoteId.Value);
+            if (note != null) note.ActionStatus = "CANCELLED";
+        }
         await _db.SaveChangesAsync();
         return NoContent();
     }

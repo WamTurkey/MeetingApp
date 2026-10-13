@@ -104,9 +104,12 @@ export function ParticipantsPanel({
             icon={<Users className="h-8 w-8" />}
           />
         ) : filteredParticipants.length === 0 ? (
-          <div className="py-8 text-center text-sm text-surface-500">
-            Arama kriterine uygun katılımcı bulunamadı.
-          </div>
+          <EmptyState
+            compact
+            message="Katılımcı bulunamadı"
+            description="Arama kriterine uygun katılımcı yok."
+            icon={<Search className="h-6 w-6" />}
+          />
         ) : (
           <div className="space-y-1">
             {filteredParticipants.map((p) => (

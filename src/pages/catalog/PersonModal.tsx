@@ -10,7 +10,10 @@ import { Button } from "@/shared/ui/Button";
 import { Input } from "@/shared/ui/Input";
 import { Select } from "@/shared/ui/Select";
 import { Checkbox } from "@/shared/ui/Checkbox";
-import { createPerson, updatePerson, fetchTitles } from "@/services/catalogService";
+import { useCreatePerson, useUpdatePerson } from "@/entities/catalog/api/mutations";
+import type { UserListDto } from "@/services/userService";
+import { useTitles } from "@/entities/catalog/api/queries";
+import { useUsers } from "@/entities/user/api/queries";
 import type { PersonDto, CompanyDto, TitleDto } from "@/types/api";
 
 interface PersonModalProps {
@@ -23,6 +26,8 @@ interface PersonModalProps {
 
 export function PersonModal({ isOpen, onClose, onSaved, editingPerson, companies }: PersonModalProps) {
   const isEdit = !!editingPerson;
+  const { mutateAsync: createPerson } = useCreatePerson();
+  const { mutateAsync: updatePerson } = useUpdatePerson();
 
   const [fullName, setFullName] = useState("");
   const [email, setEmail] = useState("");
@@ -30,14 +35,18 @@ export function PersonModal({ isOpen, onClose, onSaved, editingPerson, companies
   const [phone, setPhone] = useState("");
   const [companyId, setCompanyId] = useState<string>("");
   const [isActive, setIsActive] = useState(true);
+  const [linkedUserId, setLinkedUserId] = useState<string>("");
   const [isSaving, setIsSaving] = useState(false);
   const [error, setError] = useState("");
 
   // Load titles from API
-  const [titles, setTitles] = useState<TitleDto[]>([]);
-  useEffect(() => {
-    fetchTitles().then(setTitles).catch(console.error);
-  }, []);
+  const titlesQuery = useTitles();
+  // Kararlı referans: önbellek değişmedikçe aynı dizi → aşağıdaki form-doldurma effect'i gereksiz tetiklenmez
+  const titles: TitleDto[] = useMemo(() => titlesQuery.data ?? [], [titlesQuery.data]);
+
+  // Load system users (for Person ↔ User linking)
+  const usersQuery = useUsers({ enabled: isOpen });
+  const users: UserListDto[] = useMemo(() => usersQuery.data ?? [], [usersQuery.data]);
 
   // Populate form when editing
   useEffect(() => {
@@ -50,8 +59,10 @@ export function PersonModal({ isOpen, onClose, onSaved, editingPerson, companies
       setPhone(editingPerson.phone ?? "");
       setCompanyId(editingPerson.companyId ? String(editingPerson.companyId) : "");
       setIsActive(editingPerson.isActive);
+      setLinkedUserId(editingPerson.linkedUserId ? String(editingPerson.linkedUserId) : "");
     } else if (isOpen) {
       setFullName(""); setEmail(""); setTitleId(""); setPhone(""); setCompanyId(""); setIsActive(true);
+      setLinkedUserId("");
     }
     setError("");
   }, [isOpen, editingPerson, titles]);
@@ -60,6 +71,14 @@ export function PersonModal({ isOpen, onClose, onSaved, editingPerson, companies
     { value: "", label: "Firma seçiniz (opsiyonel)" },
     ...companies.filter(c => c.isActive).map(c => ({ value: String(c.id), label: c.name })),
   ], [companies]);
+
+  // Sadece başka bir kişiye bağlı OLMAYAN kullanıcılar (veya bu kişiye bağlı olan) listelenir
+  const userOptions = useMemo(() => [
+    { value: "", label: "Bağlı kullanıcı yok" },
+    ...users
+      .filter(u => u.linkedPersonId == null || u.linkedPersonId === editingPerson?.id)
+      .map(u => ({ value: String(u.id), label: `${u.fullName} (${u.email})` })),
+  ], [users, editingPerson]);
 
   const titleOptions = useMemo(() => [
     { value: "", label: "Unvan seçiniz (opsiyonel)" },
@@ -78,14 +97,15 @@ export function PersonModal({ isOpen, onClose, onSaved, editingPerson, companies
 
     try {
       if (isEdit && editingPerson) {
-        await updatePerson(editingPerson.id, {
+        await updatePerson({ id: editingPerson.id, dto: {
           fullName: fullName.trim(),
           email: email.trim() || undefined,
           title: selectedTitle || undefined,
           phone: phone.trim() || undefined,
           companyId: companyId ? Number(companyId) : undefined,
           isActive,
-        });
+          linkedUserId: linkedUserId ? Number(linkedUserId) : undefined,
+        } });
       } else {
         await createPerson({
           fullName: fullName.trim(),
@@ -93,6 +113,7 @@ export function PersonModal({ isOpen, onClose, onSaved, editingPerson, companies
           title: selectedTitle || undefined,
           phone: phone.trim() || undefined,
           companyId: companyId ? Number(companyId) : undefined,
+          linkedUserId: linkedUserId ? Number(linkedUserId) : undefined,
         });
       }
       onSaved();
@@ -156,6 +177,16 @@ export function PersonModal({ isOpen, onClose, onSaved, editingPerson, companies
             disabled={isSaving}
           />
         </div>
+
+        {users.length > 0 && (
+          <Select
+            label="Bağlı Sistem Kullanıcısı"
+            options={userOptions}
+            value={linkedUserId}
+            onChange={(e) => setLinkedUserId(e.target.value)}
+            disabled={isSaving}
+          />
+        )}
 
         {isEdit && (
           <Checkbox

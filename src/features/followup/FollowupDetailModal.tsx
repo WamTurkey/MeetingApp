@@ -1,5 +1,8 @@
-import { useState, useEffect } from "react";
-import { useNavigate } from "react-router-dom";
+import { useState, useEffect, useMemo } from "react";
+import { useQuery } from "@tanstack/react-query";
+import { EmptyState } from "@/shared/ui/EmptyState";
+import { Link } from "react-router-dom";
+import { useNavFrom } from "@/shared/lib/navigation";
 import {
   FileText,
   History,
@@ -24,8 +27,9 @@ import { cn } from "@/shared/lib/cn";
 import { formatDate, formatDateTime } from "@/shared/lib/formatDate";
 import type { FollowupItem } from "@/entities/followup/model";
 import type { ActionStatus } from "@/shared/config/constants";
-import { fetchPersons, fetchCompanies } from "@/services/catalogService";
-import { fetchFollowups } from "@/services/followupService";
+import { usePersons, useCompanies } from "@/entities/catalog/api/queries";
+import { useFollowups } from "@/entities/followup/api/queries";
+import { followupKeys } from "@/shared/api/queryKeys";
 import apiClient from "@/services/apiClient";
 import type { PersonDto, CompanyDto, FollowupItemDto } from "@/types/api";
 
@@ -33,10 +37,15 @@ interface FollowupDetailModalProps {
   isOpen: boolean;
   onClose: () => void;
   item: FollowupItem | null;
-  onUpdate?: (id: number, updates: Partial<FollowupItem>) => void;
+  /** `false` dönerse (kayıt başarısız) düzenleme modu korunur */
+  onUpdate?: (id: number, updates: Partial<FollowupItem>) => void | boolean | Promise<void | boolean>;
+  /** Kontrollü sekme (URL `?tab=`) — verilmezse modal kendi içinde tutar */
+  activeTab?: DetailTab;
+  onTabChange?: (tab: DetailTab) => void;
 }
 
-type DetailTab = "subject" | "history" | "minutes";
+export type DetailTab = "subject" | "history" | "minutes";
+export const DETAIL_TABS: readonly DetailTab[] = ["subject", "history", "minutes"];
 
 const STATUS_OPTIONS = [
   { value: "OPEN", label: "Açık" },
@@ -87,10 +96,16 @@ export function FollowupDetailModal({
   onClose,
   item,
   onUpdate,
+  activeTab: controlledTab,
+  onTabChange,
 }: FollowupDetailModalProps) {
-  const navigate = useNavigate();
-  const [activeTab, setActiveTab] = useState<DetailTab>("subject");
+  // Toplantıya giden linkler geri dönüş adresini (/followups?item=…&tab=…) taşır → "Geri" ile modal açık döner
+  const navFrom = useNavFrom("Takip ve Terminler");
+  const [internalTab, setInternalTab] = useState<DetailTab>("subject");
+  const activeTab = controlledTab ?? internalTab;
+  const setActiveTab = (tab: DetailTab) => (onTabChange ? onTabChange(tab) : setInternalTab(tab));
   const [isEditing, setIsEditing] = useState(false);
+  const [isSaving, setIsSaving] = useState(false);
 
   // Local editable state
   const [status, setStatus] = useState<ActionStatus>("OPEN");
@@ -102,11 +117,26 @@ export function FollowupDetailModal({
   const [responsibleCompanyId, setResponsibleCompanyId] = useState<number | "">("");
   const [dependencyItemIds, setDependencyItemIds] = useState<number[]>([]);
 
-  // Remote data for dropdowns
-  const [persons, setPersons] = useState<PersonDto[]>([]);
-  const [companies, setCompanies] = useState<CompanyDto[]>([]);
-  const [meetingTasks, setMeetingTasks] = useState<FollowupItemDto[]>([]);
-  const [changeLogs, setChangeLogs] = useState<ChangeLogEntry[]>([]);
+  // Remote data — ortak React Query önbelleğinden (dropdown'lar katalog değişikliklerini anında yansıtır)
+  const persons: PersonDto[] = usePersons().data ?? [];
+  const companies: CompanyDto[] = useCompanies().data ?? [];
+  const sourceMeetingId = item?.sourceMeetingId;
+  const meetingTasksQuery = useFollowups(
+    { sourceMeetingId: sourceMeetingId ?? undefined },
+    { enabled: isOpen && !!sourceMeetingId },
+  );
+  // Kendine bağımlılığı önlemek için mevcut madde listeden çıkarılır
+  const meetingTasks: FollowupItemDto[] = useMemo(
+    () => (meetingTasksQuery.data ?? []).filter((t) => t.id !== item?.id),
+    [meetingTasksQuery.data, item?.id],
+  );
+  // Değişiklik geçmişi — kayıt sonrası `useUpdateFollowup` bu anahtarı geçersiz kılar
+  const changeLogs: ChangeLogEntry[] =
+    useQuery({
+      queryKey: followupKeys.changelog(item?.id ?? 0),
+      queryFn: async () => (await apiClient.get<ChangeLogEntry[]>(`/followups/${item!.id}/changelog`)).data,
+      enabled: isOpen && !!item,
+    }).data ?? [];
 
   // Sync local state when item changes or modal opens
   useEffect(() => {
@@ -120,28 +150,20 @@ export function FollowupDetailModal({
       setResponsibleCompanyId(item.responsibleCompanyId ?? "");
       setDependencyItemIds(item.dependencyItemIds ?? []);
       setIsEditing(false); // Reset to view mode initially
-
-      // Fetch reference data
-      fetchPersons().then(setPersons).catch(console.error);
-      fetchCompanies().then(setCompanies).catch(console.error);
-      
-      // Fetch changelog
-      apiClient.get<ChangeLogEntry[]>(`/followups/${item.id}/changelog`)
-        .then(res => setChangeLogs(res.data))
-        .catch(console.error);
-      
-      if (item.sourceMeetingId) {
-        fetchFollowups({ sourceMeetingId: item.sourceMeetingId })
-          .then((tasks) => {
-             // Filter out the current item itself to prevent self-dependency
-             setMeetingTasks(tasks.filter(t => t.id !== item.id));
-          })
-          .catch(console.error);
-      }
     }
-  }, [isOpen, item]);
+    // Yalnızca farklı bir madde açıldığında veya madde sunucuda değiştiğinde (updatedAt) sıfırla.
+    // Arka plan yenilemeleri (aynı veri, yeni nesne) düzenleme modunu bozmaz.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [isOpen, item?.id, item?.updatedAt]);
 
   if (!item) return null;
+
+  /** Düzenleme modunda sayfadan ayrılırken kaydedilmemiş değişiklikler için onay iste */
+  function confirmLeaveIfEditing(e: React.MouseEvent) {
+    if (isEditing && !window.confirm("Kaydedilmemiş değişiklikler kaybolacak. Devam etmek istiyor musunuz?")) {
+      e.preventDefault();
+    }
+  }
 
   const tabs: { key: DetailTab; label: string; icon: React.ReactNode }[] = [
     { key: "subject", label: "Konu ve durum", icon: <FileText className="h-4 w-4" /> },
@@ -149,9 +171,12 @@ export function FollowupDetailModal({
     { key: "minutes", label: "İlişkili tutanaklar", icon: <Link2 className="h-4 w-4" /> },
   ];
 
-  function handleSave() {
-    if (!item) return;
-    onUpdate?.(item.id, {
+  async function handleSave() {
+    if (!item || isSaving) return;
+    setIsSaving(true);
+    let ok: void | boolean = true;
+    try {
+    ok = await onUpdate?.(item.id, {
       text: item.text,
       topicId: item.topicId,
       actionStatus: status,
@@ -163,7 +188,10 @@ export function FollowupDetailModal({
       responsibleCompanyId: responsibleCompanyId === "" ? null : Number(responsibleCompanyId),
       dependencyItemIds: dependencyItemIds,
     });
-    setIsEditing(false);
+    } finally {
+      setIsSaving(false);
+    }
+    if (ok !== false) setIsEditing(false);
   }
 
   // Derived display data
@@ -174,10 +202,11 @@ export function FollowupDetailModal({
   const headerActions = (
     <>
       {isEditing && (
-        <Button variant="danger" size="icon" icon={<X className="w-4 h-4" />} onClick={() => setIsEditing(false)} title="Vazgeç" />
+        <Button variant="danger" size="icon" icon={<X className="w-4 h-4" />} onClick={() => setIsEditing(false)} disabled={isSaving} title="Vazgeç" />
       )}
       <EditSaveToggleButton
         isEditing={isEditing}
+        isLoading={isSaving}
         onToggle={(editing) => {
           if (editing) {
             setIsEditing(true);
@@ -225,12 +254,11 @@ export function FollowupDetailModal({
             {/* Subject text */}
             <div className="rounded-lg border border-surface-200 bg-surface-50/50 p-4 dark:border-surface-700 dark:bg-surface-800/50">
               {item.sourceMeetingId && (
-                <button
-                  onClick={() => {
-                    onClose();
-                    window.location.href = `/meetings/${item.sourceMeetingId}`;
-                  }}
-                  className="group flex items-center gap-1.5 text-xs font-medium text-brand-600 hover:text-brand-700 dark:text-brand-400 dark:hover:text-brand-300 mb-2 transition-colors cursor-pointer"
+                <Link
+                  to={`/meetings/${item.sourceMeetingId}`}
+                  state={navFrom}
+                  onClick={confirmLeaveIfEditing}
+                  className="group inline-flex items-center gap-1.5 text-xs font-medium text-brand-600 hover:text-brand-700 dark:text-brand-400 dark:hover:text-brand-300 mb-2 transition-colors cursor-pointer"
                 >
                   <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
                     <path strokeLinecap="round" strokeLinejoin="round" d="M13.828 10.172a4 4 0 00-5.656 0l-4 4a4 4 0 105.656 5.656l1.102-1.101m-.758-4.899a4 4 0 005.656 0l4-4a4 4 0 00-5.656-5.656l-1.1 1.1" />
@@ -238,7 +266,7 @@ export function FollowupDetailModal({
                   <span className="underline decoration-brand-600/30 group-hover:decoration-brand-600/100 underline-offset-2">
                     {item.sourceMeetingTitle || `Toplantı #${item.sourceMeetingId}`}
                   </span>
-                </button>
+                </Link>
               )}
               <p className="text-sm font-medium text-surface-900 dark:text-surface-50 leading-relaxed">
                 {item.text}
@@ -533,10 +561,11 @@ export function FollowupDetailModal({
                 </div>
               </div>
             ) : (
-              <div className="flex flex-col items-center justify-center py-12 text-surface-400">
-                <History className="h-8 w-8 mb-2" />
-                <p className="text-sm">Henüz değişiklik kaydı yok.</p>
-              </div>
+              <EmptyState
+                message="Henüz değişiklik kaydı yok"
+                description="Bu madde üzerinde yapılan güncellemeler burada listelenir."
+                icon={<History className="h-8 w-8" />}
+              />
             )}
           </div>
         )}
@@ -545,12 +574,11 @@ export function FollowupDetailModal({
         {activeTab === "minutes" && (
           <div className="space-y-3">
             {item.sourceMeetingId ? (
-              <div
+              <Link
+                to={`/meetings/${item.sourceMeetingId}/minutes`}
+                state={navFrom}
+                onClick={confirmLeaveIfEditing}
                 className="flex cursor-pointer items-center gap-3 rounded-lg border border-surface-200 p-4 transition-colors hover:bg-surface-50 dark:border-surface-700 dark:hover:bg-surface-800"
-                onClick={() => {
-                  onClose();
-                  navigate(`/meetings/${item.sourceMeetingId}/minutes`);
-                }}
               >
                 <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-lg bg-brand-50 text-brand-600 dark:bg-brand-950/50 dark:text-brand-400">
                   <StickyNote className="h-5 w-5" />
@@ -564,12 +592,12 @@ export function FollowupDetailModal({
                   </p>
                 </div>
                 <ArrowRight className="h-4 w-4 text-surface-400" />
-              </div>
+              </Link>
             ) : (
-              <div className="flex flex-col items-center justify-center py-12 text-surface-400">
-                <Link2 className="h-8 w-8 mb-2" />
-                <p className="text-sm">İlişkili tutanak bulunamadı.</p>
-              </div>
+              <EmptyState
+                message="İlişkili tutanak bulunamadı"
+                icon={<Link2 className="h-8 w-8" />}
+              />
             )}
           </div>
         )}

@@ -1,14 +1,18 @@
-import { useState } from "react";
+import { useRef, useState } from "react";
 import { Navigate, Outlet } from "react-router-dom";
 import { useAuth } from "@/app/providers/AuthProvider";
 import { ErrorBoundary } from "@/shared/ui/ErrorBoundary";
 import { Sidebar } from "./Sidebar";
 import { Header } from "./Header";
+import { useScrollRestoration } from "@/shared/hooks/useScrollRestoration";
 
 export function AppLayout() {
   const { isAuthenticated } = useAuth();
   const [sidebarOpen, setSidebarOpen] = useState(false);
   const [sidebarCollapsed, setSidebarCollapsed] = useState(false);
+  const mainRef = useRef<HTMLElement>(null);
+  // Geri dönüşte liste kaydırma konumu korunur, yeni sayfada en üstten başlanır
+  useScrollRestoration(mainRef);
 
   if (!isAuthenticated) {
     return <Navigate to="/login" replace />;
@@ -26,7 +30,7 @@ export function AppLayout() {
       <div className="flex flex-1 flex-col overflow-hidden">
         <Header onMenuToggle={() => setSidebarOpen(true)} />
 
-        <main className="flex-1 overflow-y-auto px-4 py-6 sm:px-6 lg:px-8">
+        <main ref={mainRef} className="flex-1 overflow-y-auto px-4 py-6 sm:px-6 lg:px-8">
           <div className="mx-auto max-w-7xl animate-fade-in-up">
             <ErrorBoundary>
               <Outlet />

@@ -1,34 +1,27 @@
-import { useState, useEffect, useRef } from "react";
+import { useState, useRef } from "react";
 import { useParams, useNavigate } from "react-router-dom";
+import { useSmartBack } from "@/shared/lib/navigation";
 import { ArrowLeft, Download, Printer, Loader2, FileSpreadsheet } from "lucide-react";
 import { Button } from "@/shared/ui/Button";
-import { Badge } from "@/shared/ui/Badge";
 import { formatDate, formatDateTime } from "@/shared/lib/formatDate";
-import { NOTE_TYPE_LABEL, NOTE_TYPE_BADGE_VARIANT } from "@/entities/note/constants";
-import type { NoteType } from "@/shared/config/constants";
-import { fetchMeetingById } from "@/services/meetingService";
 import type { MeetingDetail } from "@/types/api";
+import { useMeetingDetail } from "@/entities/meeting/api/queries";
+import apiClient from "@/services/apiClient";
+import { toast } from "sonner";
 
 export function MinutesPreviewPage() {
   const { id } = useParams<{ id: string }>();
   const navigate = useNavigate();
   const meetingId = Number(id);
+  // Geri: geldiği yere (Takip & Terminler modalı veya toplantı detayı) — doğrudan açıldıysa toplantıya
+  const { goBack, label: backLabel } = useSmartBack(`/meetings/${meetingId}`, "Toplantıya Dön");
 
-  const [meeting, setMeeting] = useState<MeetingDetail | null>(null);
-  const [isLoading, setIsLoading] = useState(true);
+  // Toplantı detayıyla aynı önbellek → detay sayfasından geçişte tutanak anında açılır
+  const detailQuery = useMeetingDetail(meetingId);
+  const meeting: MeetingDetail | null = detailQuery.data ?? null;
+  const isLoading = detailQuery.isPending;
   const [isExporting, setIsExporting] = useState(false);
   const documentRef = useRef<HTMLDivElement>(null);
-
-  useEffect(() => {
-    (async () => {
-      try {
-        setIsLoading(true);
-        const detail = await fetchMeetingById(meetingId);
-        setMeeting(detail);
-      } catch (err) { console.error("[MinutesPreview] Load error:", err); }
-      finally { setIsLoading(false); }
-    })();
-  }, [meetingId]);
 
   if (isLoading) {
     return (
@@ -51,22 +44,16 @@ export function MinutesPreviewPage() {
   const notes = meeting.notes;
   const participants = meeting.participants;
   const decisions = notes.filter((n) => n.noteType === "DECISION");
-  const tasks = notes.filter((n) => n.noteType === "TASK");
-  const infoNotes = notes.filter((n) => n.noteType === "INFO" || n.noteType === "NOTE");
 
   const exportToPDF = async () => {
     if (!meeting) return;
     try {
       setIsExporting(true);
-      const url = `${import.meta.env.VITE_API_BASE_URL || "http://localhost:5180/api"}/meetings/${meeting.id}/export/pdf`;
-      const response = await fetch(url, {
-        method: "GET",
-        headers: {
-          Authorization: `Bearer ${localStorage.getItem("auth_token")}`,
-        }
+      // apiClient üzerinden → JWT otomatik eklenir, 401 interceptor devreye girer
+      const { data: blob } = await apiClient.get<Blob>(`/meetings/${meeting.id}/export/pdf`, {
+        responseType: "blob",
+        timeout: 60_000,
       });
-      if (!response.ok) throw new Error("PDF Export failed");
-      const blob = await response.blob();
       const downloadUrl = window.URL.createObjectURL(blob);
       const a = document.createElement("a");
       a.href = downloadUrl;
@@ -77,6 +64,7 @@ export function MinutesPreviewPage() {
       window.URL.revokeObjectURL(downloadUrl);
     } catch (err) {
       console.error("PDF Export error:", err);
+      toast.error("PDF oluşturulamadı. Lütfen tekrar deneyin.");
     } finally {
       setIsExporting(false);
     }
@@ -86,15 +74,10 @@ export function MinutesPreviewPage() {
     if (!meeting) return;
     try {
       setIsExporting(true);
-      const url = `${import.meta.env.VITE_API_BASE_URL || "http://localhost:5180/api"}/meetings/${meeting.id}/export/excel`;
-      const response = await fetch(url, {
-        method: "GET",
-        headers: {
-          Authorization: `Bearer ${localStorage.getItem("auth_token")}`,
-        }
+      const { data: blob } = await apiClient.get<Blob>(`/meetings/${meeting.id}/export/excel`, {
+        responseType: "blob",
+        timeout: 60_000,
       });
-      if (!response.ok) throw new Error("Export failed");
-      const blob = await response.blob();
       const downloadUrl = window.URL.createObjectURL(blob);
       const a = document.createElement("a");
       a.href = downloadUrl;
@@ -105,6 +88,7 @@ export function MinutesPreviewPage() {
       window.URL.revokeObjectURL(downloadUrl);
     } catch (err) {
       console.error("Excel Export error:", err);
+      toast.error("Excel dosyası oluşturulamadı. Lütfen tekrar deneyin.");
     } finally {
       setIsExporting(false);
     }
@@ -114,8 +98,8 @@ export function MinutesPreviewPage() {
     <div className="mx-auto max-w-4xl space-y-6 print:max-w-none">
       {/* Actions (hidden during print) */}
       <div className="flex items-center justify-between print:hidden">
-        <Button variant="ghost" size="sm" icon={<ArrowLeft className="h-4 w-4" />} onClick={() => navigate(`/meetings/${meetingId}`)}>
-          Toplantıya Dön
+        <Button variant="ghost" size="sm" icon={<ArrowLeft className="h-4 w-4" />} onClick={goBack}>
+          {backLabel}
         </Button>
         <div className="flex gap-2">
           <Button variant="outline" size="sm" icon={<FileSpreadsheet className="h-4 w-4" />} onClick={exportToExcel}>Excel İndir</Button>
@@ -127,121 +111,86 @@ export function MinutesPreviewPage() {
       </div>
 
       {/* Tutanak Document */}
-      <div ref={documentRef} className="rounded-xl border border-surface-200 bg-white p-8 shadow-card dark:border-surface-700 dark:bg-surface-800 print:border-0 print:shadow-none print:p-0">
-        {/* Header */}
-        <header className="mb-8 border-b border-surface-200 pb-6 dark:border-surface-700">
-          <div className="flex items-start justify-between">
-            <div>
-              <h1 className="text-2xl font-bold text-surface-900 dark:text-surface-50">
-                {meeting.title}
-              </h1>
-              <p className="mt-2 text-sm text-surface-500">
-                <span className="font-medium text-surface-900 dark:text-surface-50">TOPLANTI TUTANAĞI</span>
-              </p>
+      <div ref={documentRef} className="bg-white print:p-0">
+        <div className="w-full border-[3px] border-surface-400 font-sans text-[13px] text-black">
+          
+          {/* Header Row */}
+          <div className="flex border-b-[3px] border-surface-400">
+            <div className="flex-1 border-r border-surface-300 p-2">
+              <div className="font-bold mb-4">TOPLANTININ KONUSU</div>
+              <div className="flex gap-2"><span className="w-4">1</span><span>Toplantı Yeri</span></div>
+              <div className="flex gap-2"><span className="w-4">2</span><span>Gün ve Saat</span></div>
             </div>
-            <div className="text-right text-sm text-surface-500 dark:text-surface-400">
-              <p>{formatDate(meeting.meetingDate, "weekday")}</p>
-              <p>{meeting.plannedStart ? `Saat: ${meeting.plannedStart}` : ""}</p>
-              {meeting.locationName && <p>Yer: {meeting.locationName}</p>}
+            <div className="flex-1 p-2">
+              <div className="font-bold mb-4">{meeting.title} | {formatDate(meeting.meetingDate, "short")}</div>
+              <div className="flex gap-2 text-transparent select-none"><span className="w-4">-</span><span>-</span></div>
+              <div className="flex gap-2">
+                <span className="w-4 opacity-0">-</span>
+                <span>{formatDate(meeting.meetingDate, "short")} {meeting.plannedStart ? `- ${meeting.plannedStart}` : ""}</span>
+              </div>
             </div>
           </div>
-          {meeting.description && (
-            <p className="mt-4 text-sm leading-relaxed text-surface-600 dark:text-surface-300">
-              <span className="font-semibold">Gündem:</span> {meeting.description}
-            </p>
-          )}
-        </header>
 
-        {/* Participants */}
-        {participants.length > 0 && (
-          <section className="mb-8">
-            <h2 className="mb-3 text-lg font-semibold text-surface-900 dark:text-surface-50">Katılımcılar</h2>
-            <table className="w-full text-sm">
-              <thead>
-                <tr className="border-b border-surface-200 dark:border-surface-700">
-                  <th className="py-2 text-left font-medium text-surface-500 dark:text-surface-400">Ad Soyad</th>
-                  <th className="py-2 text-left font-medium text-surface-500 dark:text-surface-400">Firma</th>
-                  <th className="py-2 text-left font-medium text-surface-500 dark:text-surface-400">Rol</th>
-                </tr>
-              </thead>
-              <tbody>
-                {participants.map((p) => (
-                  <tr key={p.id} className="border-b border-surface-100 dark:border-surface-700/50">
-                    <td className="py-2 text-surface-900 dark:text-surface-50">{p.personName}</td>
-                    <td className="py-2 text-surface-600 dark:text-surface-400">{p.companyName ?? "—"}</td>
-                    <td className="py-2 text-surface-600 dark:text-surface-400">{p.roleDisplay}</td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-          </section>
-        )}
+          {/* Participants */}
+          <div className="flex border-b-[3px] border-surface-400 bg-surface-50">
+            <div className="flex-1 border-r border-surface-300 p-2 font-bold">KATILIMCILAR</div>
+            <div className="flex-1 p-2 font-bold">Ad ve Soyad</div>
+          </div>
+          <div className="border-b-[3px] border-surface-400 p-2">
+            {participants.map((p, i) => {
+               // Logic matches PDF: Internal -> FirmType == "INTERNAL"
+               // Here we just display Company + Role (if available) vs Name
+               const leftText = p.companyName ? `${p.companyName} ${p.roleDisplay !== "Belirtilmedi" ? p.roleDisplay : ""}`.trim() : (p.roleDisplay !== "Belirtilmedi" ? p.roleDisplay : "");
+               return (
+                 <div key={p.id} className="flex">
+                   <div className="flex-1 flex gap-2"><span className="w-4">{i + 1}</span><span>{leftText || "-"}</span></div>
+                   <div className="flex-1">{p.personName}</div>
+                 </div>
+               );
+            })}
+          </div>
 
-        {/* Decisions */}
-        {decisions.length > 0 && (
-          <section className="mb-8">
-            <h2 className="mb-3 text-lg font-semibold text-brand-700 dark:text-brand-400">📋 Kararlar</h2>
-            <ol className="list-decimal list-inside space-y-2">
-              {decisions.map((n) => (
-                <li key={n.id} className="text-sm text-surface-800 leading-relaxed dark:text-surface-200">
-                  {n.content}
-                </li>
-              ))}
-            </ol>
-          </section>
-        )}
+          {/* Agenda */}
+          <div className="border-b-[3px] border-surface-400 p-2">
+            <div className="font-bold mb-1">TOPLANTI GÜNDEMİ</div>
+            <div className="flex gap-2"><span className="w-4">1</span><span>{meeting.description || "-"}</span></div>
+          </div>
 
-        {/* Tasks */}
-        {tasks.length > 0 && (
-          <section className="mb-8">
-            <h2 className="mb-3 text-lg font-semibold text-warning-700 dark:text-warning-400">⚡ Görevler</h2>
-            <div className="space-y-2">
-              {tasks.map((n) => (
-                <div key={n.id} className="rounded-lg border border-surface-100 bg-surface-50 p-3 dark:border-surface-700 dark:bg-surface-800/50">
-                  <p className="text-sm text-surface-800 dark:text-surface-200">{n.content}</p>
-                  <div className="mt-1 flex flex-wrap gap-2 text-xs">
-                    {n.responsiblePersonName && (
-                      <span className="text-surface-500">Sorumlu: {n.responsiblePersonName}</span>
-                    )}
-                    {n.dueDate && (
-                      <span className="text-surface-500">Termin: {formatDate(n.dueDate, "short")}</span>
-                    )}
-                  </div>
-                </div>
-              ))}
+          {/* Decisions */}
+          <div className="border-b-[3px] border-surface-400 p-2">
+            <div className="font-bold mb-1">ALINAN KARARLAR</div>
+            {decisions.length > 0 ? decisions.map((d, i) => (
+              <div key={d.id} className="flex gap-2"><span className="w-4">{i + 1}</span><span>{d.content}</span></div>
+            )) : (
+              <div className="flex gap-2"><span className="w-4">1</span><span>-</span></div>
+            )}
+          </div>
+
+          {/* Important Notes / Tasks */}
+          <div className="border-b-[3px] border-surface-400 p-2">
+            <div className="font-bold mb-1">ÖNEMLİ NOTLAR:</div>
+            {notes.filter(n => n.noteType !== "DECISION").length > 0 ? notes.filter(n => n.noteType !== "DECISION").map((n, i) => (
+              <div key={n.id} className="flex gap-2">
+                <span className="w-4">{i + 1}</span>
+                <span>{n.content} {n.responsiblePersonName ? `(Sorumlu: ${n.responsiblePersonName})` : ""}</span>
+              </div>
+            )) : (
+              <div className="flex gap-2"><span className="w-4">1</span><span>-</span></div>
+            )}
+          </div>
+
+          {/* Next Meeting */}
+          <div className="p-2">
+            <div className="font-bold mb-1">BİR SONRAKİ TOPLANTI</div>
+            <div className="flex gap-2">
+              <span className="w-4">1</span>
+              <span>
+                {meeting.nextMeetingAt ? `${formatDateTime(meeting.nextMeetingAt)} ${meeting.nextMeetingNote ? `- ${meeting.nextMeetingNote}` : ""}` : "-"}
+              </span>
             </div>
-          </section>
-        )}
+          </div>
 
-        {/* Info Notes */}
-        {infoNotes.length > 0 && (
-          <section className="mb-8">
-            <h2 className="mb-3 text-lg font-semibold text-surface-900 dark:text-surface-50">📝 Notlar</h2>
-            <div className="space-y-3">
-              {infoNotes.map((n) => (
-                <div key={n.id} className="text-sm leading-relaxed text-surface-700 dark:text-surface-300 border-l-2 border-surface-300 pl-3 dark:border-surface-600">
-                  <Badge variant={NOTE_TYPE_BADGE_VARIANT[n.noteType as NoteType]} size="sm">
-                    {NOTE_TYPE_LABEL[n.noteType as NoteType]}
-                  </Badge>
-                  <p className="mt-1">{n.content}</p>
-                </div>
-              ))}
-            </div>
-          </section>
-        )}
-
-        {/* Next Meeting */}
-        <section className="border-t border-surface-200 pt-6 dark:border-surface-700">
-          <h2 className="mb-3 text-lg font-semibold text-surface-900 dark:text-surface-50">🔜 Sonraki Toplantı</h2>
-          {meeting.nextMeetingAt ? (
-            <div className="text-sm text-surface-800 dark:text-surface-200">
-              <p>Tarih: {formatDateTime(meeting.nextMeetingAt)}</p>
-              {meeting.nextMeetingNote && <p className="mt-1">{meeting.nextMeetingNote}</p>}
-            </div>
-          ) : (
-            <p className="text-sm text-surface-400 italic">Henüz planlanmadı.</p>
-          )}
-        </section>
+        </div>
       </div>
     </div>
   );

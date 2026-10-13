@@ -29,14 +29,17 @@ export function NoteRow({ note, editable = false, onUpdate, onEnter, className }
     ...personOptions.map(p => ({ value: String(p.value), label: p.label })),
   ];
 
-  // Sync state if props change externally
+  // Sunucu/önbellek değeri değişince yerel state'i eşitle.
+  // Nesne kimliğine değil ALAN değerlerine bağlıdır: başka bir satırın kaydı tamamlanıp liste
+  // yenilendiğinde bu satırda yazılmakta olan metin ezilmez. Hata anında yapılan geri alma
+  // (rollback) alan değerini değiştirdiği için yerel state de otomatik geri döner.
   useEffect(() => {
     setContent(note.content);
     setType(note.noteType);
     setDueDate(note.dueDate || "");
     setPersonId(note.responsiblePersonId ? String(note.responsiblePersonId) : "");
     setHasTermin(Boolean(note.dueDate || note.responsiblePersonId));
-  }, [note]);
+  }, [note.id, note.content, note.noteType, note.dueDate, note.responsiblePersonId]);
 
   const handleBlur = () => {
     if (!editable || !onUpdate) return;

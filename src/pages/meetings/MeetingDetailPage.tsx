@@ -1,5 +1,6 @@
 import type { MeetingStatus } from "@/shared/config/constants";
-import { useState, useEffect, useCallback } from "react";
+import { useState, useMemo } from "react";
+import { useQueryClient } from "@tanstack/react-query";
 import { useParams, useNavigate, Link } from "react-router-dom";
 import { ArrowLeft, Pencil, FileText, Loader2 } from "lucide-react";
 import { Button } from "@/shared/ui/Button";
@@ -20,18 +21,22 @@ import { StartMeetingButton } from "@/features/meeting/StartMeetingButton";
 import { EndMeetingButton } from "@/features/meeting/EndMeetingButton";
 import { DeleteMeetingButton } from "@/features/meeting/DeleteMeetingButton";
 import { EditMeetingForm } from "@/features/meeting/EditMeetingForm";
-import {
-  fetchMeetingById,
-  updateMeeting,
-  deleteMeeting,
-  addNote, updateNote,
-  deleteNote as apiDeleteNote,
-  addParticipant,
-  removeParticipant,
-  toggleAttendance,
-  reorderItems,
-} from "@/services/meetingService";
 import type { MeetingDetail, NoteDto, ParticipantDto } from "@/types/api";
+import { meetingKeys } from "@/shared/api/queryKeys";
+import { useNavFrom, useSmartBack, useUrlParams } from "@/shared/lib/navigation";
+import { useMeetingDetail } from "@/entities/meeting/api/queries";
+import {
+  patchMeetingDetail,
+  useAddNote,
+  useAddParticipants,
+  useDeleteMeeting,
+  useDeleteNote,
+  useUpdateMeeting,
+  useRemoveParticipant,
+  useReorderNotes,
+  useToggleAttendance,
+  useUpdateNote,
+} from "@/entities/meeting/api/mutations";
 
 type TabKey = "notes" | "participants" | "links" | "info" | "minutes" | "prep";
 
@@ -60,6 +65,21 @@ function toMeeting(d: MeetingDetail): Meeting {
     linkedMeetings: (d as any).linkedMeetings ?? [],
     createdAt: d.createdAt, updatedAt: d.updatedAt,
   };
+}
+
+/**
+ * DTO → Note dönüşümü referans-kararlıdır: React Query'nin yapısal paylaşımı (structural sharing)
+ * sayesinde değişmeyen DTO'lar aynı referansla gelir; WeakMap aynı Note nesnesini döndürür.
+ * Böylece bir notun kaydı tamamlandığında DİĞER satırlar yeniden senkronize olmaz (yazılan metin korunur).
+ */
+const noteCache = new WeakMap<NoteDto, Note>();
+function toNoteStable(n: NoteDto): Note {
+  let cached = noteCache.get(n);
+  if (!cached) {
+    cached = toNote(n);
+    noteCache.set(n, cached);
+  }
+  return cached;
 }
 
 function toNote(n: NoteDto): Note {
@@ -92,31 +112,38 @@ export function MeetingDetailPage() {
   const navigate = useNavigate();
   const meetingId = Number(id);
 
-  const [meeting, setMeeting] = useState<Meeting | null>(null);
-  const [notes, setNotes] = useState<Note[]>([]);
-  const [participants, setParticipants] = useState<Participant[]>([]);
-  const [activeTab, setActiveTab] = useState<TabKey>("notes");
+  // Sekme URL'de (?tab=links) → tutanak / bağlı toplantıdan "Geri" ile dönüldüğünde aynı sekme açılır
+  const { params, update } = useUrlParams();
+  const tabParam = params.get("tab");
+  const activeTab: TabKey = TABS.some((t) => t.key === tabParam) ? (tabParam as TabKey) : "notes";
+  const setActiveTab = (tab: TabKey) => update({ tab: tab === "notes" ? null : tab });
+  // Geri: geldiği sayfaya (Takip & Terminler + açık modal, Takvim, Dashboard…) — doğrudan açıldıysa Toplantılar
+  const { goBack, label: backLabel } = useSmartBack("/meetings", "Toplantılar");
   const [showEdit, setShowEdit] = useState(false);
-  const [isLoading, setIsLoading] = useState(true);
-  const [error, setError] = useState<string | null>(null);
 
-  const load = useCallback(async (silent = false) => {
-    try {
-      if (!silent) setIsLoading(true);
-      setError(null);
-      const detail = await fetchMeetingById(meetingId);
-      setMeeting(toMeeting(detail));
-      setNotes(detail.notes.map(toNote));
-      setParticipants(detail.participants.map(toParticipant));
-    } catch (err) {
-      console.error("[MeetingDetailPage] Load error:", err);
-      if (!silent) setError("Toplantı yüklenirken hata oluştu.");
-    } finally {
-      if (!silent) setIsLoading(false);
-    }
-  }, [meetingId]);
+  const qc = useQueryClient();
+  const detailQuery = useMeetingDetail(meetingId);
+  const detail = detailQuery.data;
+  const navFrom = useNavFrom(detail?.title ?? "Toplantı");
+  const isLoading = detailQuery.isPending;
+  const error = detailQuery.isError ? "Toplantı yüklenirken hata oluştu." : null;
 
-  useEffect(() => { load(); }, [load]);
+  const meeting = useMemo<Meeting | null>(() => (detail ? toMeeting(detail) : null), [detail]);
+  const notes = useMemo<Note[]>(() => detail?.notes.map(toNoteStable) ?? [], [detail?.notes]);
+  const participants = useMemo<Participant[]>(
+    () => detail?.participants.map(toParticipant) ?? [],
+    [detail?.participants],
+  );
+
+  const updateNoteMutation = useUpdateNote(meetingId);
+  const deleteNoteMutation = useDeleteNote(meetingId);
+  const reorderNotesMutation = useReorderNotes(meetingId);
+  const toggleAttendanceMutation = useToggleAttendance(meetingId);
+  const removeParticipantMutation = useRemoveParticipant(meetingId);
+  const updateMeetingMutation = useUpdateMeeting(meetingId);
+  const deleteMeetingMutation = useDeleteMeeting();
+  const addNoteMutation = useAddNote(meetingId);
+  const addParticipantsMutation = useAddParticipants(meetingId);
 
   if (isLoading) {
     return (
@@ -130,7 +157,7 @@ export function MeetingDetailPage() {
     return (
       <div className="py-24 text-center">
         <p className="text-danger-600">{error ?? "Toplantı bulunamadı."}</p>
-        <Button variant="outline" className="mt-4" onClick={() => navigate("/meetings")}>Geri Dön</Button>
+        <Button variant="outline" className="mt-4" onClick={goBack}>Geri Dön</Button>
       </div>
     );
   }
@@ -139,125 +166,111 @@ export function MeetingDetailPage() {
 
   async function handleEdit(data: any) {
     try {
-      await updateMeeting(meetingId, data);
+      await updateMeetingMutation.mutateAsync(data);
       setShowEdit(false);
       toast.success("Toplantı güncellendi");
-      await load(true);
     } catch (err) { console.error("[MeetingDetail] Edit error:", err); toast.error("Toplantı güncellenemedi"); }
   }
 
   async function handleStart() {
     try {
-      await updateMeeting(meetingId, { ...meeting!, status: "ACTIVE" } as any);
-      await load(true);
-    } catch (err) { console.error("[MeetingDetail] Start error:", err); }
+      await updateMeetingMutation.mutateAsync({ ...meeting!, status: "ACTIVE" } as any);
+    } catch (err) { console.error("[MeetingDetail] Start error:", err); toast.error("Toplantı başlatılamadı"); }
   }
 
   async function handleEnd() {
     try {
-      await updateMeeting(meetingId, { ...meeting!, status: "COMPLETED" } as any);
-      await load(true);
-    } catch (err) { console.error("[MeetingDetail] End error:", err); }
+      await updateMeetingMutation.mutateAsync({ ...meeting!, status: "COMPLETED" } as any);
+    } catch (err) { console.error("[MeetingDetail] End error:", err); toast.error("Toplantı bitirilemedi"); }
   }
 
   async function handleStatusChange(newStatus: MeetingStatus) {
     if (meeting?.status === newStatus) return;
     try {
-      await updateMeeting(meetingId, { ...meeting!, status: newStatus } as any);
+      await updateMeetingMutation.mutateAsync({ ...meeting!, status: newStatus } as any);
       toast.success("Toplantı durumu güncellendi");
-      await load(true);
     } catch (err) { console.error("[MeetingDetail] Status update error:", err); toast.error("Durum güncellenemedi"); }
   }
 
   async function handleDelete() {
     try {
-      await deleteMeeting(meetingId);
-      toast.error("Toplantı silindi");
-      navigate("/meetings");
+      await deleteMeetingMutation.mutateAsync(meetingId); // listeler / bağlı toplantılar / terminler tazelenir
+      toast.success("Toplantı silindi");
+      navigate("/meetings", { replace: true }); // silinen kayda "geri" dönülemesin
+      // Sayfa ayrıldıktan sonra silinen toplantının detayını önbellekten at (aktifken atılırsa 404 refetch olur)
+      window.setTimeout(() => qc.removeQueries({ queryKey: meetingKeys.detail(meetingId) }), 0);
     } catch (err) { console.error("[MeetingDetail] Delete error:", err); toast.error("Toplantı silinemedi"); }
   }
 
-  async function handleReorderNotes(reorderedNotes: Note[]) {
-    setNotes(reorderedNotes);
-    const payload = reorderedNotes.map((n, index) => ({
-      type: "NOTE" as const,
-      id: n.id,
-      order: index + 1
-    }));
-    try {
-      await reorderItems(meetingId, payload);
-      toast.success("Sıralama başarıyla güncellendi");
-    } catch (err) {
-      console.error("[MeetingDetail] Reorder error:", err);
-      toast.error("Sıralama güncellenemedi");
-      await load(true);
-    }
+  function handleReorderNotes(reorderedNotes: Note[]) {
+    // İyimser: yeni sıra anında uygulanır, hata olursa hook eski sıraya döner
+    reorderNotesMutation.mutate(reorderedNotes.map((n) => n.id), {
+      onSuccess: () => toast.success("Sıralama başarıyla güncellendi"),
+    });
   }
 
-  async function handleAddNote(data: NoteCreatePayload) {
+  async function handleAddNote(data: NoteCreatePayload, insertIndex?: number) {
     try {
-      await addNote(meetingId, {
+      const newNoteDto = await addNoteMutation.mutateAsync({
         content: data.content,
         noteType: data.noteType,
-        displayOrder: notes.length + 1,
+        displayOrder: insertIndex !== undefined ? insertIndex + 1 : notes.length + 1,
         responsiblePersonId: data.responsiblePersonId ?? undefined,
         dueDate: data.dueDate ?? undefined,
         actionStatus: data.actionStatus,
       });
       toast.success("Not başarıyla eklendi");
-      await load(true);
+
+      // Yeni notu önbelleğe istenen konuma yerleştir (anında görünür)
+      const latest = qc.getQueryData<MeetingDetail>(meetingKeys.detail(meetingId))?.notes ?? [];
+      const others = latest.filter((n) => n.id !== newNoteDto.id);
+      const pos = insertIndex !== undefined && insertIndex < others.length ? insertIndex : others.length;
+      const next = [...others];
+      next.splice(pos, 0, newNoteDto);
+      patchMeetingDetail(qc, meetingId, (d) => ({ ...d, notes: next }));
+
+      // Araya ekleme yapıldıysa kalıcı sırayı sunucuya yaz
+      if (pos < others.length) await reorderNotesMutation.mutateAsync(next.map((n) => n.id));
     } catch (err) { console.error("[MeetingDetail] AddNote error:", err); toast.error("Not eklenemedi"); }
   }
 
-  async function handleUpdateNote(noteId: number, data: Partial<NoteCreatePayload>) {
-    try {
-      await updateNote(meetingId, noteId, data as any);
-      await load(true);
-    } catch (err) {
-      console.error("[MeetingDetail] UpdateNote error:", err);
-      toast.error("Not güncellenemedi");
-    }
+  function handleUpdateNote(noteId: number, data: Partial<NoteCreatePayload>) {
+    // İyimser + tam DTO ile kayıt + hata anında geri alma (bkz. useUpdateNote)
+    updateNoteMutation.mutate({ noteId, patch: data });
   }
 
   async function handleDeleteNote(noteId: number) {
     try {
-      await apiDeleteNote(meetingId, noteId);
-      setNotes((prev) => prev.filter((n) => n.id !== noteId));
-      toast.error("Not silindi");
-    } catch (err) { console.error("[MeetingDetail] DeleteNote error:", err); toast.error("Not silinemedi"); }
+      await deleteNoteMutation.mutateAsync(noteId);
+    } catch {
+      /* hook geri aldı ve bildirim gösterdi */
+    }
   }
 
   async function handleAddParticipants(dataArray: ParticipantCreatePayload[]) {
     try {
-      await Promise.all(dataArray.map(data => addParticipant(meetingId, { personId: data.personId, role: data.role })));
+      await addParticipantsMutation.mutateAsync(dataArray.map(data => ({ personId: data.personId, role: data.role })));
       toast.success(`${dataArray.length} katılımcı eklendi`);
-      await load(true);
     } catch (err) { console.error("[MeetingDetail] AddParticipant error:", err); toast.error("Katılımcılar eklenemedi"); }
   }
 
-  async function handleRemoveParticipant(participantId: number) {
-    try {
-      await removeParticipant(meetingId, participantId);
-      setParticipants((prev) => prev.filter((p) => p.id !== participantId));
-    } catch (err) { console.error("[MeetingDetail] RemoveParticipant error:", err); }
+  function handleRemoveParticipant(participantId: number) {
+    removeParticipantMutation.mutate(participantId);
   }
 
-  async function handleToggleAttendance(participantId: number, isAttended: boolean) {
-    try {
-      await toggleAttendance(meetingId, participantId, isAttended);
-      setParticipants((prev) => prev.map((p) => p.id === participantId ? { ...p, isAttended } : p));
-      toast.success("Katılım durumu güncellendi");
-    } catch (err) { console.error("[MeetingDetail] ToggleAttendance error:", err); toast.error("Durum güncellenemedi"); }
+  function handleToggleAttendance(participantId: number, isAttended: boolean) {
+    // İyimser: checkbox anında değişir, hata olursa geri alınır
+    toggleAttendanceMutation.mutate({ participantId, isAttended });
   }
 
   return (
     <div className="space-y-6">
       {/* Back + actions */}
       <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
-        <Button variant="ghost" size="sm" icon={<ArrowLeft className="h-4 w-4" />} onClick={() => navigate("/meetings")}>Toplantılar</Button>
+        <Button variant="ghost" size="sm" icon={<ArrowLeft className="h-4 w-4" />} onClick={goBack}>{backLabel}</Button>
         <div className="flex items-center gap-2 flex-wrap">
           {editable && (<Button variant="outline" size="icon" icon={<Pencil className="h-4 w-4" />} onClick={() => setShowEdit(true)} title="Düzenle" />)}
-          <Link to={`/meetings/${meetingId}/minutes`}><Button variant="outline" size="sm" icon={<FileText className="h-4 w-4" />}>Tutanak Önizle</Button></Link>
+          <Link to={`/meetings/${meetingId}/minutes`} state={navFrom}><Button variant="outline" size="sm" icon={<FileText className="h-4 w-4" />}>Tutanak Önizle</Button></Link>
           <StartMeetingButton meeting={meeting} onStart={handleStart} />
           <EndMeetingButton meeting={meeting} onEnd={handleEnd} />
           <DeleteMeetingButton meeting={meeting} onDelete={handleDelete} />
@@ -314,7 +327,7 @@ export function MeetingDetailPage() {
       {activeTab === "participants" && (
         <ParticipantsPanel participants={participants} meetingId={meetingId} editable={editable} onAddMultiple={handleAddParticipants} onRemove={handleRemoveParticipant} onToggleAttendance={handleToggleAttendance} />
       )}
-      {activeTab === "links" && <MeetingLinksPanel meeting={meeting} onRefresh={() => load(true)} />}
+      {activeTab === "links" && <MeetingLinksPanel meeting={meeting} />}
       {activeTab === "info" && (
         <Card><CardContent className="space-y-4">
           {[
@@ -336,10 +349,10 @@ export function MeetingDetailPage() {
           <FileText className="mx-auto h-12 w-12 text-surface-300 dark:text-surface-600" />
           <h3 className="mt-4 font-semibold text-surface-900 dark:text-surface-50">Tutanak Editörü</h3>
           <p className="mt-2 text-sm text-surface-500 dark:text-surface-400">Yapılandırılmış tutanak düzenleyici ileride bu alana entegre edilecektir.</p>
-          <Link to={`/meetings/${meetingId}/minutes`}><Button variant="primary" className="mt-4">Önizlemeye Git</Button></Link>
+          <Link to={`/meetings/${meetingId}/minutes`} state={navFrom}><Button variant="primary" className="mt-4">Önizlemeye Git</Button></Link>
         </CardContent></Card>
       )}
-      {activeTab === "prep" && <MeetingPrepPanel meetingId={meetingId} onRefresh={() => load(true)} />}
+      {activeTab === "prep" && <MeetingPrepPanel meetingId={meetingId} />}
 
       {/* Edit modal */}
       <Modal isOpen={showEdit} onClose={() => setShowEdit(false)} title="Toplantıyı Düzenle" size="lg">

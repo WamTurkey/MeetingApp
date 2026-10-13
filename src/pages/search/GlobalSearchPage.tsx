@@ -1,13 +1,14 @@
-import { useState, useMemo, useEffect } from "react";
+import { useMemo } from "react";
+import { useMeetingsList } from "@/entities/meeting/api/queries";
+import { useFollowups } from "@/entities/followup/api/queries";
 import { useNavigate } from "react-router-dom";
+import { useNavFrom, useUrlParams } from "@/shared/lib/navigation";
 import { Search, ClipboardCheck, Calendar, Loader2 } from "lucide-react";
 import { SearchBar } from "@/shared/ui/SearchBar";
 import { Badge } from "@/shared/ui/Badge";
 import { Card, CardContent } from "@/shared/ui/Card";
 import { EmptyState } from "@/shared/ui/EmptyState";
 import { formatDate } from "@/shared/lib/formatDate";
-import { fetchMeetings } from "@/services/meetingService";
-import { fetchFollowups } from "@/services/followupService";
 import type { MeetingListItem, FollowupItemDto } from "@/types/api";
 
 type ResultItem = {
@@ -26,25 +27,17 @@ const KIND_ICON: Record<string, React.ReactNode> = {
 
 export function GlobalSearchPage() {
   const navigate = useNavigate();
-  const [query, setQuery] = useState("");
-  const [allMeetings, setAllMeetings] = useState<MeetingListItem[]>([]);
-  const [allFollowups, setAllFollowups] = useState<FollowupItemDto[]>([]);
-  const [isLoading, setIsLoading] = useState(true);
-
-  useEffect(() => {
-    (async () => {
-      try {
-        setIsLoading(true);
-        const [mData, fData] = await Promise.all([
-          fetchMeetings({ pageSize: 200 }),
-          fetchFollowups(),
-        ]);
-        setAllMeetings(mData.items);
-        setAllFollowups(fData);
-      } catch (err) { console.error("[GlobalSearch] Load error:", err); }
-      finally { setIsLoading(false); }
-    })();
-  }, []);
+  // Arama terimi URL'de (?q=) → sonuçtan "Geri" ile dönüldüğünde arama korunur
+  const { params, update } = useUrlParams();
+  const query = params.get("q") ?? "";
+  const setQuery = (value: string) => update({ q: value });
+  const navFrom = useNavFrom("Arama");
+  // Takvim ile aynı anahtarlar → önbellek paylaşılır, sayfa anında açılır
+  const meetingsQuery = useMeetingsList({ pageSize: 200 });
+  const followupsQuery = useFollowups();
+  const allMeetings: MeetingListItem[] = useMemo(() => meetingsQuery.data?.items ?? [], [meetingsQuery.data]);
+  const allFollowups: FollowupItemDto[] = useMemo(() => followupsQuery.data ?? [], [followupsQuery.data]);
+  const isLoading = meetingsQuery.isPending || followupsQuery.isPending;
 
   const results = useMemo(() => {
     if (!query.trim()) return [];
@@ -87,7 +80,7 @@ export function GlobalSearchPage() {
         <div className="space-y-2">
           <p className="text-xs text-surface-400 mb-2">{results.length} sonuç bulundu</p>
           {results.map((r) => (
-            <Card key={`${r.kind}-${r.id}`} hoverable onClick={() => r.meetingId ? navigate(`/meetings/${r.meetingId}`) : navigate("/followups")} className="group">
+            <Card key={`${r.kind}-${r.id}`} hoverable onClick={() => navigate(r.kind === "followup" ? `/followups?item=${r.id}` : `/meetings/${r.meetingId}`, { state: navFrom })} className="group">
               <CardContent className="flex items-start gap-3 py-3">
                 <div className="mt-0.5 text-brand-500">{KIND_ICON[r.kind]}</div>
                 <div className="flex-1 min-w-0">

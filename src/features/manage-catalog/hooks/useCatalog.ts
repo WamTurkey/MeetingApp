@@ -1,10 +1,18 @@
 /**
  * Hook: useCatalog
  *
- * API'den katalog verilerini çeker (Companies, Projects, Locations, Categories).
- * Mock veriden API'ye geçirildi.
+ * API'den katalog verilerini çeker (Companies, Projects, Locations, Categories, Titles).
+ * React Query önbelleğini kullanır: aynı türü kullanan tüm bileşenler (CreateMeetingModal,
+ * iç içe CatalogModal, CatalogPage…) TEK önbelleği paylaşır. Bir yerde yapılan ekleme / güncelleme /
+ * silme (ör. firma tipi değişimi) tüm dropdown'lara ve `companyGroups`'a anında yansır.
+ * Ekleme / güncelleme / silme `useMutation` ile yapılır; başarıda `invalidateAfter.catalogChanged`
+ * türün kendisini ve bağımlı ekranları (kişiler, toplantı detayları, terminler) tazeler.
  */
-import { useState, useCallback, useEffect } from "react";
+import { useCallback, useMemo } from "react";
+import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
+import { catalogKeys } from "@/shared/api/queryKeys";
+import { invalidateAfter } from "@/shared/api/invalidation";
+import { STALE } from "@/shared/api/queryClient";
 import type { ComboBoxOption } from "@/shared/ui/ComboBox";
 import {
   fetchCompanies, fetchProjects, fetchLocations, fetchCategories,
@@ -13,6 +21,8 @@ import {
   updateCompany, updateProject, updateLocation, updateCategory,
   fetchTitles, createTitle, deleteTitle, updateTitle,
 } from "@/services/catalogService";
+
+type CatalogFormData = Record<string, string | boolean>;
 
 export type CatalogKind = "projects" | "companies" | "locations" | "categories" | "titles";
 
@@ -60,51 +70,57 @@ const CATALOG_FIELDS: Record<CatalogKind, { label: string; fields: { key: string
   },
 };
 
+/** Tür → { query key, fetcher } — DTO'lar ortak `CatalogItem` şekline indirgenir */
+const CATALOG_QUERIES: Record<CatalogKind, { key: () => readonly unknown[]; fetch: () => Promise<CatalogItem[]> }> = {
+  companies: {
+    key: catalogKeys.companies,
+    fetch: async () => (await fetchCompanies()).map(c => ({ id: c.id, name: c.name, shortName: c.shortName, isActive: c.isActive, firmType: c.firmType })),
+  },
+  projects: {
+    key: catalogKeys.projects,
+    fetch: async () => (await fetchProjects()).map(p => ({ id: p.id, name: p.name, code: p.code, isActive: p.isActive })),
+  },
+  locations: {
+    key: catalogKeys.locations,
+    fetch: async () => (await fetchLocations()).map(l => ({ id: l.id, name: l.name, isActive: l.isActive })),
+  },
+  categories: {
+    key: catalogKeys.categories,
+    fetch: async () => (await fetchCategories()).map(c => ({ id: c.id, name: c.name, isActive: c.isActive })),
+  },
+  titles: {
+    key: catalogKeys.titles,
+    fetch: async () => (await fetchTitles()).map(t => ({ id: t.id, name: t.name, isActive: t.isActive })),
+  },
+};
+
 export function useCatalog(kind: CatalogKind) {
   const config = CATALOG_FIELDS[kind];
-  const [items, setItems] = useState<CatalogItem[]>([]);
-  const [isLoading, setIsLoading] = useState(true);
+  const qc = useQueryClient();
+  const { fetch } = CATALOG_QUERIES[kind];
 
-  // API'den veri çek
+  // Not: CatalogItem DTO'dan türetildiği için ham DTO önbelleğiyle (catalogKeys.<tür>) çakışmasın diye
+  // alt anahtar "items" kullanılır; invalidation üst anahtar üzerinden ikisini birden kapsar.
+  const query = useQuery({
+    queryKey: catalogKeys.items(kind),
+    queryFn: fetch,
+    staleTime: STALE.catalog,
+  });
+  const items = useMemo(() => query.data ?? [], [query.data]);
+  const isLoading = query.isPending;
+
+  /** Bu türe ait tüm önbellekleri (ham DTO + CatalogItem) tazeler */
   const load = useCallback(async () => {
-    setIsLoading(true);
-    try {
-      let data: CatalogItem[];
-      switch (kind) {
-        case "companies":
-          data = (await fetchCompanies()).map(c => ({ id: c.id, name: c.name, shortName: c.shortName, isActive: c.isActive, firmType: c.firmType }));
-          break;
-        case "projects":
-          data = (await fetchProjects()).map(p => ({ id: p.id, name: p.name, code: p.code, isActive: p.isActive }));
-          break;
-        case "locations":
-          data = (await fetchLocations()).map(l => ({ id: l.id, name: l.name, isActive: l.isActive }));
-          break;
-        case "categories":
-          data = (await fetchCategories()).map(c => ({ id: c.id, name: c.name, isActive: c.isActive }));
-          break;
-        case "titles":
-          data = (await fetchTitles()).map(t => ({ id: t.id, name: t.name, isActive: t.isActive }));
-          break;
-      }
-      setItems(data);
-    } catch (err) {
-      console.error(`[useCatalog:${kind}] API Error:`, err);
-    } finally {
-      setIsLoading(false);
-    }
-  }, [kind]);
+    await invalidateAfter.catalogChanged(qc, kind);
+  }, [qc, kind]);
 
-  useEffect(() => {
-    load();
-  }, [load]);
-
-  const options: ComboBoxOption[] = items
-    .filter((i) => i.isActive)
-    .map((i) => ({ value: i.id, label: i.name }));
+  const options: ComboBoxOption[] = useMemo(
+    () => items.filter((i) => i.isActive).map((i) => ({ value: i.id, label: i.name })),
+    [items],
+  );
 
   // Grouped company options for ComboBox
-  const companyGroups = kind === "companies"
+  const companyGroups = useMemo(() => kind === "companies"
     ? [
         {
           label: "İç Ekip",
@@ -119,87 +135,70 @@ export function useCatalog(kind: CatalogKind) {
             .map(i => ({ value: i.id, label: i.name })),
         },
       ].filter(g => g.options.length > 0)
-    : [];
+    : [], [kind, items]);
 
-  const create = useCallback(
-    async (data: Record<string, string | boolean>) => {
-      try {
-        let created;
-        switch (kind) {
-          case "companies":
-            created = await createCompany({ name: data.name as string, shortName: data.shortName as string, firmType: (data.firmType as "INTERNAL" | "EXTERNAL") || "EXTERNAL" });
-            break;
-          case "projects":
-            created = await createProject({ name: data.name as string, code: data.code as string });
-            break;
-          case "locations":
-            created = await createLocation({ name: data.name as string });
-            break;
-          case "categories":
-            created = await createCategory({ name: data.name as string });
-            break;
-          case "titles":
-            created = await createTitle({ name: data.name as string });
-            break;
-        }
-        await load(); // yeniden yükle
-        return created;
-      } catch (err) {
-        console.error(`[useCatalog:${kind}] Create Error:`, err);
-        throw err;
+  // Dönen promise'ler beklenir: çağıran taraf (ör. iç içe CatalogModal) yeni kaydı listede hazır bulur
+  const onSuccess = () => invalidateAfter.catalogChanged(qc, kind);
+
+  const { mutateAsync: createAsync } = useMutation({
+    mutationFn: (data: CatalogFormData) => {
+      const name = data.name as string;
+      switch (kind) {
+        case "companies":
+          return createCompany({ name, shortName: data.shortName as string, firmType: (data.firmType as "INTERNAL" | "EXTERNAL") || "EXTERNAL" });
+        case "projects":
+          return createProject({ name, code: data.code as string });
+        case "locations":
+          return createLocation({ name });
+        case "categories":
+          return createCategory({ name });
+        case "titles":
+          return createTitle({ name });
       }
     },
-    [kind, load],
-  );
+    onSuccess,
+    onError: (err) => console.error(`[useCatalog:${kind}] Create Error:`, err),
+  });
 
-  const update = useCallback(
-    async (id: number, data: Record<string, string | boolean>) => {
-      try {
-        let updated;
-        switch (kind) {
-          case "companies":
-            updated = await updateCompany(id, { name: data.name as string, shortName: data.shortName as string, firmType: (data.firmType as "INTERNAL" | "EXTERNAL") || "EXTERNAL", isActive: data.isActive !== false });
-            break;
-          case "projects":
-            updated = await updateProject(id, { name: data.name as string, code: data.code as string, isActive: data.isActive !== false });
-            break;
-          case "locations":
-            updated = await updateLocation(id, { name: data.name as string, isActive: data.isActive !== false });
-            break;
-          case "categories":
-            updated = await updateCategory(id, { name: data.name as string, isActive: data.isActive !== false });
-            break;
-          case "titles":
-            updated = await updateTitle(id, { name: data.name as string, isActive: data.isActive !== false });
-            break;
-        }
-        await load();
-        return updated;
-      } catch (err) {
-        console.error(`[useCatalog:${kind}] Update Error:`, err);
-        throw err;
+  const { mutateAsync: updateAsync } = useMutation({
+    mutationFn: ({ id, data }: { id: number; data: CatalogFormData }) => {
+      const name = data.name as string;
+      const isActive = data.isActive !== false;
+      switch (kind) {
+        case "companies":
+          return updateCompany(id, { name, shortName: data.shortName as string, firmType: (data.firmType as "INTERNAL" | "EXTERNAL") || "EXTERNAL", isActive });
+        case "projects":
+          return updateProject(id, { name, code: data.code as string, isActive });
+        case "locations":
+          return updateLocation(id, { name, isActive });
+        case "categories":
+          return updateCategory(id, { name, isActive });
+        case "titles":
+          return updateTitle(id, { name, isActive });
       }
     },
-    [kind, load],
-  );
+    onSuccess,
+    onError: (err) => console.error(`[useCatalog:${kind}] Update Error:`, err),
+  });
 
-  const remove = useCallback(
-    async (id: number) => {
-      try {
-        switch (kind) {
-          case "companies": await deleteCompany(id); break;
-          case "projects": await deleteProject(id); break;
-          case "locations": await deleteLocation(id); break;
-          case "categories": await deleteCategory(id); break;
-          case "titles": await deleteTitle(id); break;
-        }
-        await load();
-      } catch (err) {
-        console.error(`[useCatalog:${kind}] Delete Error:`, err);
+  const { mutateAsync: removeAsync } = useMutation({
+    mutationFn: (id: number) => {
+      switch (kind) {
+        case "companies": return deleteCompany(id);
+        case "projects": return deleteProject(id);
+        case "locations": return deleteLocation(id);
+        case "categories": return deleteCategory(id);
+        case "titles": return deleteTitle(id);
       }
     },
-    [kind, load],
-  );
+    onSuccess,
+    // Hata yeniden fırlatılır: çağıran taraf (CatalogModal) spinner'ı kapatıp bildirimi gösterir
+    onError: (err) => console.error(`[useCatalog:${kind}] Delete Error:`, err),
+  });
+
+  const create = useCallback((data: CatalogFormData) => createAsync(data), [createAsync]);
+  const update = useCallback((id: number, data: CatalogFormData) => updateAsync({ id, data }), [updateAsync]);
+  const remove = useCallback(async (id: number) => { await removeAsync(id); }, [removeAsync]);
 
   return {
     items,

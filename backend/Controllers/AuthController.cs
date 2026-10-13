@@ -26,6 +26,7 @@ public class AuthController : ControllerBase
 
     /// <summary>POST /api/Auth/login</summary>
     [HttpPost("login")]
+    [AllowAnonymous]
     public async Task<ActionResult<LoginResponseDto>> Login([FromBody] LoginRequestDto dto)
     {
         var user = await _db.Users.FirstOrDefaultAsync(u => u.Email == dto.Email && u.IsActive);
@@ -42,6 +43,8 @@ public class AuthController : ControllerBase
 
     /// <summary>POST /api/Auth/register</summary>
     [HttpPost("register")]
+    // Açık kayıt RBAC'yi devre dışı bırakırdı → kullanıcıları yalnızca Admin oluşturabilir (bkz. POST /api/users)
+    [Authorize(Roles = "Admin")]
     public async Task<ActionResult<LoginResponseDto>> Register([FromBody] RegisterRequestDto dto)
     {
         if (await _db.Users.AnyAsync(u => u.Email == dto.Email))

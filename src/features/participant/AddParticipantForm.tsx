@@ -6,7 +6,7 @@
  * - Auto-fills person data (name, email, title, company) on selection.
  * - Outputs a clean { meeting_id, person_id, role } payload.
  */
-import { useState, useEffect, useMemo } from "react";
+import { useState, useMemo } from "react";
 import { UserPlus, Building2 } from "lucide-react";
 import { Button } from "@/shared/ui/Button";
 import { Select } from "@/shared/ui/Select";
@@ -18,7 +18,7 @@ import type {
   Participant,
 } from "@/entities/participant/model";
 import { PARTICIPANT_ROLE_LABEL } from "@/entities/participant/model";
-import { fetchPersons, fetchCompanies } from "@/services/catalogService";
+import { usePersons, useCompanies } from "@/entities/catalog/api/queries";
 import type { PersonDto, CompanyDto } from "@/types/api";
 import type { Person } from "@/entities/person/model";
 
@@ -49,27 +49,27 @@ export function AddParticipantForm({
   isLoading = false,
 }: AddParticipantFormProps) {
   // People + Companies pool
-  const [people, setPeople] = useState<Person[]>([]);
-  const [companies, setCompanies] = useState<CompanyDto[]>([]);
+  // Ortak katalog önbelleği — firma tipi / kişi değişiklikleri anında yansır
+  const personsQuery = usePersons();
+  const companiesQuery = useCompanies();
   const [selectedCompanyId, setSelectedCompanyId] = useState<string>("");
   const [selectedPersonIds, setSelectedPersonIds] = useState<number[]>([]);
   const [role, setRole] = useState<ParticipantRole>("ATTENDEE");
   const [error, setError] = useState("");
 
-  // Load persons and companies on mount
-  useEffect(() => {
-    fetchPersons().then(data => {
-      setPeople(data.map((p: PersonDto) => ({
+  const people = useMemo<Person[]>(
+    () =>
+      (personsQuery.data ?? []).map((p: PersonDto) => ({
         id: p.id, fullName: p.fullName, email: p.email ?? "", title: p.title ?? "",
         companyId: p.companyId, companyName: p.companyName ?? undefined, isActive: p.isActive,
-        phone: p.phone ?? "", createdAt: "", updatedAt: "",
-      } as Person)));
-    }).catch(console.error);
-
-    fetchCompanies().then(data => {
-      setCompanies(data.filter(c => c.isActive));
-    }).catch(console.error);
-  }, []);
+        phone: p.phone ?? "", linkedUserId: p.linkedUserId ?? null, createdAt: "", updatedAt: "",
+      } as Person)),
+    [personsQuery.data],
+  );
+  const companies = useMemo<CompanyDto[]>(
+    () => (companiesQuery.data ?? []).filter((c) => c.isActive),
+    [companiesQuery.data],
+  );
 
   // Exclude already-added participants from dropdown
   const existingPersonIds = useMemo(

@@ -1,5 +1,7 @@
-import { useState, useMemo, useEffect, useCallback } from "react";
+import { useState, useMemo } from "react";
 import { Download, Filter, Loader2 } from "lucide-react";
+import { EmptyState } from "@/shared/ui/EmptyState";
+import { useFollowups } from "@/entities/followup/api/queries";
 import { Button } from "@/shared/ui/Button";
 import { SearchBar } from "@/shared/ui/SearchBar";
 import { Select } from "@/shared/ui/Select";
@@ -8,7 +10,6 @@ import { Card, CardContent } from "@/shared/ui/Card";
 import { cn } from "@/shared/lib/cn";
 import { formatDate } from "@/shared/lib/formatDate";
 import { ACTION_STATUS_LABEL, type ActionStatus } from "@/shared/config/constants";
-import { fetchFollowups } from "@/services/followupService";
 import type { FollowupItemDto } from "@/types/api";
 
 const PERIODS = [
@@ -27,19 +28,9 @@ export function ReportsPage() {
   const [period, setPeriod] = useState("ALL");
   const [scope, setScope] = useState("ALL");
   const [search, setSearch] = useState("");
-  const [followups, setFollowups] = useState<FollowupItemDto[]>([]);
-  const [isLoading, setIsLoading] = useState(true);
-
-  const load = useCallback(async () => {
-    try {
-      setIsLoading(true);
-      const data = await fetchFollowups();
-      setFollowups(data);
-    } catch (err) { console.error("[Reports] Load error:", err); }
-    finally { setIsLoading(false); }
-  }, []);
-
-  useEffect(() => { load(); }, [load]);
+  const followupsQuery = useFollowups();
+  const followups: FollowupItemDto[] = useMemo(() => followupsQuery.data ?? [], [followupsQuery.data]);
+  const isLoading = followupsQuery.isPending;
 
   const rows = useMemo(() => {
     const needle = search.toLowerCase();
@@ -117,6 +108,13 @@ export function ReportsPage() {
                   </tr>
                 </thead>
                 <tbody>
+                  {rows.length === 0 && (
+                    <tr>
+                      <td colSpan={5}>
+                        <EmptyState compact message="Rapor kaydı bulunamadı" description="Seçili filtre veya aramaya uygun takip maddesi yok." />
+                      </td>
+                    </tr>
+                  )}
                   {rows.map((row) => (
                     <tr key={row.id} className="border-b border-surface-100 transition-colors hover:bg-surface-50/50 dark:border-surface-800 dark:hover:bg-surface-800/50">
                       <td className="max-w-xs px-4 py-3 font-medium text-surface-900 truncate dark:text-surface-50">{row.text}</td>

@@ -5,12 +5,15 @@ import { cn } from "@/shared/lib/cn";
 export interface EditSaveToggleButtonProps {
   isEditing: boolean;
   onToggle: (newIsEditing: boolean) => void;
+  /** Kaydetme sürerken spinner gösterir ve mükerrer tıklamayı engeller */
+  isLoading?: boolean;
   className?: string;
 }
 
 export function EditSaveToggleButton({
   isEditing,
   onToggle,
+  isLoading = false,
   className,
 }: EditSaveToggleButtonProps) {
   return (
@@ -18,6 +21,8 @@ export function EditSaveToggleButton({
       variant={isEditing ? "primary" : "outline"}
       size="icon"
       className={cn("transition-colors duration-200", className)}
+      isLoading={isLoading}
+      aria-busy={isLoading}
       onClick={() => onToggle(!isEditing)}
       title={isEditing ? "Kaydet" : "Düzenle"}
       icon={

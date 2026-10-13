@@ -231,9 +231,41 @@ public class MeetingsController : ControllerBase
         var meeting = await _db.Meetings.FindAsync(id);
         if (meeting == null) return NotFound();
 
+        var userId = int.Parse(User.FindFirst(System.Security.Claims.ClaimTypes.NameIdentifier)?.Value ?? "1");
+        var now = DateTime.UtcNow;
+
         meeting.IsDeleted = true;
-        meeting.DeletedAt = DateTime.UtcNow;
-        meeting.DeletedBy = 1;  // TODO: JWT'den alınacak
+        meeting.DeletedAt = now;
+        meeting.DeletedBy = userId;
+
+        // Cascade Soft-Delete Notes
+        var notes = await _db.Notes.Where(n => n.MeetingId == id && !n.IsDeleted).ToListAsync();
+        foreach (var note in notes)
+        {
+            note.IsDeleted = true;
+            note.DeletedAt = now;
+            note.DeletedBy = userId;
+        }
+
+        // Cascade Soft-Delete Followups
+        var followups = await _db.FollowupItems.Where(f => f.SourceMeetingId == id && !f.IsDeleted).ToListAsync();
+        foreach (var followup in followups)
+        {
+            followup.IsDeleted = true;
+            followup.DeletedAt = now;
+            followup.DeletedBy = userId;
+            followup.ActionStatus = "CANCELLED"; // Optionally mark as cancelled
+        }
+
+        // Cascade Soft-Delete Attachments
+        var attachments = await _db.Attachments.Where(a => a.EntityType == "Meeting" && a.EntityId == id && !a.IsDeleted).ToListAsync();
+        foreach (var attachment in attachments)
+        {
+            attachment.IsDeleted = true;
+            attachment.DeletedAt = now;
+            attachment.DeletedBy = userId;
+        }
+
         await _db.SaveChangesAsync();
 
         return NoContent();
@@ -298,6 +330,8 @@ public class MeetingsController : ControllerBase
     public async Task<ActionResult<NoteDto>> AddNote(int id, [FromBody] CreateNoteDto dto)
     {
         if (!await _db.Meetings.AnyAsync(m => m.Id == id)) return NotFound();
+        if (!await _db.LkNoteTypes.AnyAsync(t => t.TypeCode == dto.NoteType))
+            return BadRequest(new { message = $"Geçersiz not tipi: '{dto.NoteType}'." }); // FK ihlali → 500 yerine 400
 
         var note = new Note
         {
@@ -307,10 +341,16 @@ public class MeetingsController : ControllerBase
             DisplayOrder = dto.DisplayOrder,
             ResponsiblePersonId = dto.ResponsiblePersonId,
             DueDate = !string.IsNullOrEmpty(dto.DueDate) ? DateOnly.Parse(dto.DueDate) : null,
-            ActionStatus = dto.ActionStatus,
+            ActionStatus = string.IsNullOrWhiteSpace(dto.ActionStatus) ? null : NoteFollowupSync.NormalizeStatus(dto.ActionStatus),
             CreatedBy = 1
         };
         _db.Notes.Add(note);
+        await _db.SaveChangesAsync();
+
+        // ────────────────────────────
+        // TAKİP/TERMİN ENTEGRASYONU (bkz. NoteFollowupSync kuralları)
+        // ────────────────────────────
+        await NoteFollowupSync.SyncFromNoteAsync(_db, note, note.CreatedBy);
         await _db.SaveChangesAsync();
 
         var n = await _db.Notes
@@ -331,17 +371,25 @@ public class MeetingsController : ControllerBase
     {
         var note = await _db.Notes.FirstOrDefaultAsync(n => n.Id == noteId && n.MeetingId == id);
         if (note == null) return NotFound();
+        if (!await _db.LkNoteTypes.AnyAsync(t => t.TypeCode == dto.NoteType))
+            return BadRequest(new { message = $"Geçersiz not tipi: '{dto.NoteType}'." });
 
         note.Content = dto.Content;
         note.NoteType = dto.NoteType;
         note.DisplayOrder = dto.DisplayOrder;
         note.ResponsiblePersonId = dto.ResponsiblePersonId;
         note.DueDate = !string.IsNullOrEmpty(dto.DueDate) ? DateOnly.Parse(dto.DueDate) : null;
-        note.ActionStatus = dto.ActionStatus;
+        note.ActionStatus = string.IsNullOrWhiteSpace(dto.ActionStatus) ? null : NoteFollowupSync.NormalizeStatus(dto.ActionStatus);
         note.UpdatedBy = 1;
         note.UpdatedAt = DateTime.UtcNow;
 
+        // ────────────────────────────
+        // TAKİP/TERMİN ENTEGRASYONU GÜNCELLEMESİ — tek SaveChanges ile atomik
+        // (Eski satır içi mantık "CLOSED" gibi LK_ActionStatus'ta olmayan bir kod yazıp FK hatasına yol açıyordu.)
+        // ────────────────────────────
+        await NoteFollowupSync.SyncFromNoteAsync(_db, note, 1);
         await _db.SaveChangesAsync();
+
 
         var n = await _db.Notes
             .Include(x => x.NoteTypeNavigation)
@@ -364,6 +412,8 @@ public class MeetingsController : ControllerBase
         note.IsDeleted = true;
         note.DeletedAt = DateTime.UtcNow;
         note.DeletedBy = 1;
+        // Bağlı takip kaydı da soft-delete (Takip & Terminler'de "hayalet" kayıt kalmasın)
+        await NoteFollowupSync.CascadeDeleteAsync(_db, note.Id, 1);
         await _db.SaveChangesAsync();
         return NoContent();
     }
@@ -373,12 +423,23 @@ public class MeetingsController : ControllerBase
     public async Task<ActionResult<MeetingLinkDto>> AddLink(int id, [FromBody] CreateMeetingLinkDto dto)
     {
         if (!await _db.Meetings.AnyAsync(m => m.Id == id)) return NotFound();
+        if (!await _db.Meetings.AnyAsync(m => m.Id == dto.ChildMeetingId))
+            return BadRequest(new { message = "Bağlanmak istenen toplantı bulunamadı." });
+
+        // Kendine bağlama = en basit döngü
+        if (dto.ChildMeetingId == id)
+            return BadRequest(new { code = "CYCLIC_LINK", message = "Döngüsel bağlı toplantı oluşturulamaz." });
         
         // Check for duplicate link
         var existing = await _db.MeetingLinks.FirstOrDefaultAsync(x => 
             x.ParentMeetingId == id && x.ChildMeetingId == dto.ChildMeetingId);
         if (existing != null)
             return Conflict(new { message = "Bu toplantı bağlantısı zaten mevcut." });
+
+        // Döngü kontrolü: child'dan başlayıp ileri (parent→child) yönde ilerlerken
+        // bu toplantıya (id) ulaşılabiliyorsa, yeni bağlantı bir döngü kapatır.
+        if (await CreatesCycleAsync(id, dto.ChildMeetingId))
+            return BadRequest(new { code = "CYCLIC_LINK", message = "Döngüsel bağlı toplantı oluşturulamaz." });
         
         var link = new MeetingLink
         {
@@ -400,6 +461,32 @@ public class MeetingsController : ControllerBase
             l.RelationType, l.RelationTypeNavigation.DisplayName, "CHILD"));
     }
 
+    /// <summary>
+    /// parentId → childId bağlantısı eklenirse döngü oluşur mu? (BFS, ziyaret edilen düğümler takip edilir)
+    /// </summary>
+    private async Task<bool> CreatesCycleAsync(int parentId, int childId)
+    {
+        var edges = await _db.MeetingLinks
+            .Select(l => new { l.ParentMeetingId, l.ChildMeetingId })
+            .ToListAsync();
+        var adjacency = edges
+            .GroupBy(e => e.ParentMeetingId)
+            .ToDictionary(g => g.Key, g => g.Select(e => e.ChildMeetingId).ToList());
+
+        var visited = new HashSet<int>();
+        var queue = new Queue<int>();
+        queue.Enqueue(childId);
+        while (queue.Count > 0)
+        {
+            var current = queue.Dequeue();
+            if (current == parentId) return true;
+            if (!visited.Add(current)) continue;
+            if (adjacency.TryGetValue(current, out var next))
+                foreach (var n in next) queue.Enqueue(n);
+        }
+        return false;
+    }
+
     // ──────────── DELETE /api/meetings/{id}/links/{linkId} ────────────
     [HttpDelete("{id}/links/{linkId}")]
     public async Task<IActionResult> DeleteLink(int id, int linkId)
@@ -419,14 +506,14 @@ public class MeetingsController : ControllerBase
             .Include(f => f.RolledOverFrom)
             .Where(f => f.SourceMeetingId == link.ChildMeetingId && 
                         f.RolledOverFromId != null && 
-                        f.RolledOverFrom.SourceMeetingId == link.ParentMeetingId && 
+                        f.RolledOverFrom!.SourceMeetingId == link.ParentMeetingId && 
                         !f.IsDeleted)
             .ToListAsync();
 
         if (rolledOverItems.Any())
         {
             // Restore the old items' status if they were ROLLED_OVER
-            var oldItemIds = rolledOverItems.Where(f => f.RolledOverFromId.HasValue).Select(f => f.RolledOverFromId.Value).ToList();
+            var oldItemIds = rolledOverItems.Where(f => f.RolledOverFromId.HasValue).Select(f => f.RolledOverFromId.GetValueOrDefault()).ToList();
             var oldItems = await _db.FollowupItems.Where(f => oldItemIds.Contains(f.Id)).ToListAsync();
             foreach(var oldItem in oldItems) {
                 if (oldItem.ActionStatus == "ROLLED_OVER") 
@@ -485,7 +572,7 @@ public class MeetingsController : ControllerBase
             .Include(x => x.ResponsibleCompany)
             .Include(x => x.ActionStatusNavigation)
             .Include(x => x.DependentOn)
-            .Where(x => parentMeetingIds.Contains(x.SourceMeetingId.Value))
+            .Where(x => x.SourceMeetingId != null && parentMeetingIds.Contains(x.SourceMeetingId.Value))
             .Where(x => x.ActionStatus != "COMPLETED" && x.ActionStatus != "CANCELLED" && x.ActionStatus != "ROLLED_OVER" && x.ActionStatus != "DONE")
             .ToListAsync();
 
@@ -590,10 +677,19 @@ public class MeetingsController : ControllerBase
             LocationName = m.Location?.Name ?? "-",
             ProjectName = m.Project?.Name ?? "-",
             CategoryName = m.Category?.Name ?? "-",
-            Notes = m.Notes.OrderBy(n => n.DisplayOrder).ToList()
+            // Fallback: gündemsiz toplantıda boş liste (null değil)
+            Notes = (m.Notes ?? new List<Note>())
+                .Where(n => n != null)
+                .OrderBy(n => n.DisplayOrder)
+                .ToList()
         };
 
-        dto.InternalParticipants = m.Participants
+        // Fallback: katılımcısız toplantıda boş liste; kişisi silinmiş katılımcılar atlanır
+        var participants = (m.Participants ?? new List<MeetingParticipant>())
+            .Where(p => p != null && p.Person != null)
+            .ToList();
+
+        dto.InternalParticipants = participants
             .Where(p => (p.Person?.Company?.FirmType ?? "EXTERNAL") == "INTERNAL")
             .GroupBy(p => p.Person?.Company?.Name ?? "Belirtilmedi")
             .Select(g => new InternalParticipantGroupDto
@@ -602,7 +698,7 @@ public class MeetingsController : ControllerBase
                 ParticipantsText = string.Join(", ", g.Select(x => x.Person?.FullName ?? ""))
             }).ToList();
 
-        dto.ExternalParticipants = m.Participants
+        dto.ExternalParticipants = participants
             .Where(p => (p.Person?.Company?.FirmType ?? "EXTERNAL") == "EXTERNAL")
             .OrderBy(p => p.Person?.Company?.Name)
             .ThenBy(p => p.Person?.FullName)
@@ -636,7 +732,7 @@ public class MeetingsController : ControllerBase
         ws.Range("B2:E2").Merge();
         
         ws.Cell("A3").Value = "Tarih / Saat:";
-        ws.Cell("B3").Value = dto.MeetingDate?.ToString("dd.MM.yyyy") + (dto.MeetingTime.HasValue ? $" / {dto.MeetingTime.Value.ToString("hh\\:mm")}" : "");
+        ws.Cell("B3").Value = dto.MeetingDate?.ToString("dd.MM.yyyy") + (dto.MeetingTime.HasValue ? $" / {dto.MeetingTime.Value.ToString("HH\\:mm")}" : "");
         ws.Range("B3:E3").Merge();
 
         ws.Cell("A4").Value = "Yer:";
@@ -661,10 +757,10 @@ public class MeetingsController : ControllerBase
         {
             foreach (var g in dto.InternalParticipants)
             {
-                ws.Cell(row, 1).Value = g.CompanyName;
+                ws.Cell(row, 1).Value = g.CompanyName ?? "-";
                 ws.Cell(row, 1).Style.Font.SetBold(true);
                 
-                ws.Cell(row, 2).Value = g.ParticipantsText;
+                ws.Cell(row, 2).Value = g.ParticipantsText ?? "-";
                 ws.Cell(row, 2).Style.Alignment.SetWrapText(true);
                 
                 ws.Range(row, 2, row, 5).Merge();
@@ -684,13 +780,20 @@ public class MeetingsController : ControllerBase
 
             foreach (var p in dto.ExternalParticipants)
             {
-                ws.Cell(row, 1).Value = p.CompanyName;
-                ws.Cell(row, 2).Value = p.Title;
-                ws.Cell(row, 3).Value = p.FullName;
+                ws.Cell(row, 1).Value = p.CompanyName ?? "-";
+                ws.Cell(row, 2).Value = p.Title ?? "-";
+                ws.Cell(row, 3).Value = p.FullName ?? "-";
                 ws.Range(row, 3, row, 5).Merge();
                 ws.Range(row, 1, row, 5).Style.Border.SetOutsideBorder(XLBorderStyleValues.Thin).Border.SetInsideBorder(XLBorderStyleValues.Thin);
                 row++;
             }
+        }
+
+        if (!dto.InternalParticipants.Any() && !dto.ExternalParticipants.Any())
+        {
+            ws.Cell(row, 1).Value = "Katılımcı kaydı bulunmamaktadır.";
+            ws.Range(row, 1, row, 5).Merge().Style.Font.SetItalic().Font.SetFontColor(XLColor.Gray);
+            row++;
         }
 
         row++;
@@ -713,7 +816,7 @@ public class MeetingsController : ControllerBase
         {
             ws.Cell(row, 1).Value = seq++;
             ws.Cell(row, 2).Value = note.NoteTypeNavigation?.DisplayName ?? "-";
-            ws.Cell(row, 3).Value = note.Content;
+            ws.Cell(row, 3).Value = note.Content ?? string.Empty;
             ws.Cell(row, 4).Value = note.ResponsiblePerson?.FullName ?? "-";
             ws.Cell(row, 5).Value = note.DueDate?.ToString("dd.MM.yyyy") ?? "-";
             
@@ -722,6 +825,13 @@ public class MeetingsController : ControllerBase
             ws.Range(row, 1, row, 5).Style.Border.SetOutsideBorder(XLBorderStyleValues.Thin).Border.SetInsideBorder(XLBorderStyleValues.Thin);
             ws.Range(row, 1, row, 5).Style.Alignment.SetVertical(XLAlignmentVerticalValues.Top);
             
+            row++;
+        }
+
+        if (dto.Notes.Count == 0)
+        {
+            ws.Cell(row, 1).Value = "Gündem maddesi bulunmamaktadır.";
+            ws.Range(row, 1, row, 5).Merge().Style.Font.SetItalic().Font.SetFontColor(XLColor.Gray);
             row++;
         }
 
@@ -756,7 +866,7 @@ public class MeetingsController : ControllerBase
                 page.Size(PageSizes.A4);
                 page.Margin(1, Unit.Centimetre);
                 page.PageColor(Colors.White);
-                page.DefaultTextStyle(x => x.FontSize(10).FontFamily("Arial"));
+                page.DefaultTextStyle(x => x.FontSize(10).FontFamily("Lato"));
 
                 page.Header().Element(c => ComposeHeader(c, dto));
                 page.Content().Element(c => ComposeContent(c, dto));
@@ -774,6 +884,25 @@ public class MeetingsController : ControllerBase
         return File(pdfData, "application/pdf", $"Tutanak_{dto.MeetingId}_{DateTime.Now:yyyyMMddHHmm}.pdf");
     }
 
+    // ──────────── PDF yardımcıları ────────────
+
+    /// <summary>QuestPDF Text/Span null kabul etmez → boş/null değerler için güvenli fallback.</summary>
+    private static string Safe(string? value, string fallback = "-") =>
+        string.IsNullOrWhiteSpace(value) ? fallback : value;
+
+    /// <summary>Bu uzunluğun altındaki satırlar sayfalar arasında bölünmez (bütün halinde bir sonraki sayfaya taşınır).</summary>
+    private const int AtomicRowCharLimit = 700;
+
+    private static IContainer HeaderCellStyle(IContainer c) =>
+        c.Background(Colors.Grey.Lighten3).BorderBottom(1).BorderColor(Colors.Grey.Lighten1).PaddingVertical(4).PaddingHorizontal(3);
+
+    private static IContainer BodyCellStyle(IContainer c, string bg) =>
+        c.Background(bg).BorderBottom(0.5f).BorderColor(Colors.Grey.Lighten2).PaddingVertical(3).PaddingHorizontal(3);
+
+    private static void ComposeEmptyNotice(IContainer container, string message) =>
+        container.Border(0.5f).BorderColor(Colors.Grey.Lighten2).Background(Colors.Grey.Lighten5)
+            .Padding(8).AlignCenter().Text(message).Italic().FontColor(Colors.Grey.Darken1);
+
     private void ComposeHeader(IContainer container, MeetingMinutesExportDto dto)
     {
         container.Row(row =>
@@ -784,17 +913,19 @@ public class MeetingsController : ControllerBase
                 col.Item().PaddingTop(5).Text(text =>
                 {
                     text.Span("Konu: ").SemiBold();
-                    text.Span(dto.Title);
+                    text.Span(Safe(dto.Title));
                 });
                 col.Item().Text(text =>
                 {
                     text.Span("Tarih / Saat: ").SemiBold();
-                    text.Span(dto.MeetingDate?.ToString("dd.MM.yyyy") + (dto.MeetingTime.HasValue ? $" / {dto.MeetingTime.Value.ToString("hh\\:mm")}" : ""));
+                    var datePart = dto.MeetingDate?.ToString("dd.MM.yyyy") ?? "-";
+                    var timePart = dto.MeetingTime.HasValue ? $" / {dto.MeetingTime.Value:HH\\:mm}" : "";
+                    text.Span(datePart + timePart);
                 });
                 col.Item().Text(text =>
                 {
                     text.Span("Yer: ").SemiBold();
-                    text.Span(dto.LocationName);
+                    text.Span(Safe(dto.LocationName));
                 });
             });
         });
@@ -802,14 +933,24 @@ public class MeetingsController : ControllerBase
 
     private void ComposeContent(IContainer container, MeetingMinutesExportDto dto)
     {
+        var internals = dto.InternalParticipants ?? new List<InternalParticipantGroupDto>();
+        var externals = dto.ExternalParticipants ?? new List<ExternalParticipantDto>();
+        var notes = dto.Notes ?? new List<Note>();
+
         container.PaddingVertical(1, Unit.Centimetre).Column(col =>
         {
             col.Spacing(15);
             
-            // Participants
-            col.Item().Text("KATILIMCILAR").FontSize(12).SemiBold().FontColor(Colors.Grey.Darken3);
+            // ── Participants ──
+            // EnsureSpace: başlık sayfanın en altında "yetim" kalmasın, en az birkaç satır sığacak alan olsun
+            col.Item().EnsureSpace(60).Text("KATILIMCILAR").FontSize(12).SemiBold().FontColor(Colors.Grey.Darken3);
+
+            if (!internals.Any() && !externals.Any())
+            {
+                col.Item().Element(c => ComposeEmptyNotice(c, "Katılımcı kaydı bulunmamaktadır."));
+            }
             
-            if (dto.InternalParticipants.Any())
+            if (internals.Any())
             {
                 col.Item().Table(table =>
                 {
@@ -819,15 +960,16 @@ public class MeetingsController : ControllerBase
                         columns.RelativeColumn(7);
                     });
 
-                    foreach (var ip in dto.InternalParticipants)
+                    foreach (var ip in internals)
                     {
-                        table.Cell().Text(ip.CompanyName).SemiBold();
-                        table.Cell().Text(ip.ParticipantsText);
+                        // Kısa satırlar bölünmez
+                        table.Cell().ShowEntire().Element(c => BodyCellStyle(c, Colors.White)).Text(Safe(ip.CompanyName)).SemiBold();
+                        table.Cell().ShowEntire().Element(c => BodyCellStyle(c, Colors.White)).Text(Safe(ip.ParticipantsText));
                     }
                 });
             }
 
-            if (dto.ExternalParticipants.Any())
+            if (externals.Any())
             {
                 col.Item().Table(table =>
                 {
@@ -838,58 +980,77 @@ public class MeetingsController : ControllerBase
                         columns.RelativeColumn(4);
                     });
 
+                    // Header her yeni sayfada otomatik tekrarlanır
                     table.Header(header =>
                     {
-                        header.Cell().BorderBottom(1).BorderColor(Colors.Grey.Lighten2).PaddingBottom(5).Text("Firma").SemiBold();
-                        header.Cell().BorderBottom(1).BorderColor(Colors.Grey.Lighten2).PaddingBottom(5).Text("Ünvan").SemiBold();
-                        header.Cell().BorderBottom(1).BorderColor(Colors.Grey.Lighten2).PaddingBottom(5).Text("Ad Soyad").SemiBold();
+                        header.Cell().Element(HeaderCellStyle).Text("Firma").SemiBold();
+                        header.Cell().Element(HeaderCellStyle).Text("Ünvan").SemiBold();
+                        header.Cell().Element(HeaderCellStyle).Text("Ad Soyad").SemiBold();
                     });
 
                     int index = 0;
-                    foreach (var ep in dto.ExternalParticipants)
+                    foreach (var ep in externals)
                     {
                         var bgColor = index % 2 == 0 ? Colors.White : Colors.Grey.Lighten4;
-                        table.Cell().Background(bgColor).Padding(3).Text(ep.CompanyName);
-                        table.Cell().Background(bgColor).Padding(3).Text(ep.Title);
-                        table.Cell().Background(bgColor).Padding(3).Text(ep.FullName);
+                        table.Cell().ShowEntire().Element(c => BodyCellStyle(c, bgColor)).Text(Safe(ep.CompanyName));
+                        table.Cell().ShowEntire().Element(c => BodyCellStyle(c, bgColor)).Text(Safe(ep.Title));
+                        table.Cell().ShowEntire().Element(c => BodyCellStyle(c, bgColor)).Text(Safe(ep.FullName));
                         index++;
                     }
                 });
             }
 
-            // Meeting Items
-            col.Item().PaddingTop(10).Text("GÜNDEM VE KARARLAR").FontSize(12).SemiBold().FontColor(Colors.Grey.Darken3);
+            // ── Meeting Items ──
+            col.Item().PaddingTop(10).EnsureSpace(80).Text("GÜNDEM VE KARARLAR").FontSize(12).SemiBold().FontColor(Colors.Grey.Darken3);
+
+            if (notes.Count == 0)
+            {
+                col.Item().Element(c => ComposeEmptyNotice(c, "Gündem maddesi bulunmamaktadır."));
+                return;
+            }
             
             col.Item().Table(table =>
             {
                 table.ColumnsDefinition(columns =>
                 {
-                    columns.ConstantColumn(20);
-                    columns.ConstantColumn(50);
+                    columns.ConstantColumn(22);
+                    columns.ConstantColumn(55);
                     columns.RelativeColumn();
-                    columns.ConstantColumn(70);
+                    columns.ConstantColumn(75);
                     columns.ConstantColumn(60);
                 });
 
                 table.Header(header =>
                 {
-                    header.Cell().BorderBottom(1).BorderColor(Colors.Grey.Lighten2).PaddingBottom(5).Text("#").SemiBold();
-                    header.Cell().BorderBottom(1).BorderColor(Colors.Grey.Lighten2).PaddingBottom(5).Text("Tip").SemiBold();
-                    header.Cell().BorderBottom(1).BorderColor(Colors.Grey.Lighten2).PaddingBottom(5).Text("İçerik").SemiBold();
-                    header.Cell().BorderBottom(1).BorderColor(Colors.Grey.Lighten2).PaddingBottom(5).Text("Sorumlu").SemiBold();
-                    header.Cell().BorderBottom(1).BorderColor(Colors.Grey.Lighten2).PaddingBottom(5).Text("Termin").SemiBold();
+                    header.Cell().Element(HeaderCellStyle).Text("#").SemiBold();
+                    header.Cell().Element(HeaderCellStyle).Text("Tip").SemiBold();
+                    header.Cell().Element(HeaderCellStyle).Text("İçerik").SemiBold();
+                    header.Cell().Element(HeaderCellStyle).Text("Sorumlu").SemiBold();
+                    header.Cell().Element(HeaderCellStyle).Text("Termin").SemiBold();
                 });
 
                 int index = 0;
                 int seq = 1;
-                foreach (var note in dto.Notes)
+                foreach (var note in notes)
                 {
                     var bgColor = index % 2 == 0 ? Colors.White : Colors.Grey.Lighten4;
-                    table.Cell().Background(bgColor).Padding(3).Text(seq.ToString());
-                    table.Cell().Background(bgColor).Padding(3).Text(note.NoteTypeNavigation?.DisplayName ?? "-");
-                    table.Cell().Background(bgColor).Padding(3).Text(note.Content);
-                    table.Cell().Background(bgColor).Padding(3).Text(note.ResponsiblePerson?.FullName ?? "-");
-                    table.Cell().Background(bgColor).Padding(3).Text(note.DueDate?.ToString("dd.MM.yyyy") ?? "-");
+                    var content = note.Content ?? string.Empty;
+
+                    // Page-break kuralı:
+                    //  • Normal uzunluktaki satırlar ShowEntire ile bütün halinde tutulur → hücre ortadan bölünmez,
+                    //    satır sığmıyorsa tamamı sonraki sayfaya geçer (tablo başlığı tekrar eder).
+                    //  • Tek sayfaya sığmayacak kadar uzun içerikte ShowEntire layout hatası verir; bu durumda
+                    //    yalnızca EnsureSpace uygulanır (en az birkaç satır sığmıyorsa yeni sayfadan başlar).
+                    var isAtomic = content.Length <= AtomicRowCharLimit;
+                    IContainer Cell() => isAtomic
+                        ? table.Cell().ShowEntire().Element(c => BodyCellStyle(c, bgColor))
+                        : table.Cell().EnsureSpace(60).Element(c => BodyCellStyle(c, bgColor));
+
+                    Cell().Text(seq.ToString());
+                    Cell().Text(Safe(note.NoteTypeNavigation?.DisplayName));
+                    Cell().Text(Safe(content, ""));
+                    Cell().Text(Safe(note.ResponsiblePerson?.FullName));
+                    Cell().Text(note.DueDate?.ToString("dd.MM.yyyy") ?? "-");
                     index++;
                     seq++;
                 }

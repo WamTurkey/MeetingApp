@@ -1,11 +1,15 @@
-import { useState, useMemo, useRef, useCallback, useEffect } from "react";
+import { useState, useMemo, useRef, useCallback } from "react";
 import { useNavigate } from "react-router-dom";
+import { useNavFrom } from "@/shared/lib/navigation";
 import FullCalendar from "@fullcalendar/react";
 import dayGridPlugin from "@fullcalendar/daygrid";
 import timeGridPlugin from "@fullcalendar/timegrid";
 import interactionPlugin from "@fullcalendar/interaction";
 import listPlugin from "@fullcalendar/list";
 import { CalendarDays, ChevronLeft, ChevronRight, List, LayoutGrid, Clock, Plus, Loader2 } from "lucide-react";
+import { useMeetingsList } from "@/entities/meeting/api/queries";
+import { toast } from "sonner";
+import { useFollowups } from "@/entities/followup/api/queries";
 import { Button } from "@/shared/ui/Button";
 import { cn } from "@/shared/lib/cn";
 import { CreateMeetingModal } from "@/features/create-meeting";
@@ -13,8 +17,7 @@ import {
   MEETING_STATUS_LABEL,
   type MeetingStatus,
 } from "@/shared/config/constants";
-import { fetchMeetings, createMeeting } from "@/services/meetingService";
-import { fetchFollowups } from "@/services/followupService";
+import { useCreateMeeting } from "@/entities/meeting/api/mutations";
 import type { MeetingListItem, FollowupItemDto, CreateMeetingRequest } from "@/types/api";
 
 type CalView = "dayGridMonth" | "timeGridWeek" | "timeGridDay" | "listWeek";
@@ -36,32 +39,19 @@ const STATUS_COLORS: Record<MeetingStatus, { bg: string; border: string; text: s
 const FOLLOWUP_COLOR = { bg: "#fce7f3", border: "#f472b6", text: "#9d174d" };
 
 export function CalendarPage() {
+  const { mutateAsync: createMeeting } = useCreateMeeting();
   const navigate = useNavigate();
+  const navFrom = useNavFrom("Takvim");
   const calendarRef = useRef<any>(null);
   const [currentView, setCurrentView] = useState<CalView>("dayGridMonth");
   const [title, setTitle] = useState("");
   const [showCreate, setShowCreate] = useState(false);
-  const [meetingItems, setMeetingItems] = useState<MeetingListItem[]>([]);
-  const [followupItems, setFollowupItems] = useState<FollowupItemDto[]>([]);
-  const [isLoading, setIsLoading] = useState(true);
-
-  useEffect(() => {
-    (async () => {
-      try {
-        setIsLoading(true);
-        const [mData, fData] = await Promise.all([
-          fetchMeetings({ pageSize: 200 }),
-          fetchFollowups(),
-        ]);
-        setMeetingItems(mData.items);
-        setFollowupItems(fData);
-      } catch (err) {
-        console.error("[Calendar] Load error:", err);
-      } finally {
-        setIsLoading(false);
-      }
-    })();
-  }, []);
+  // Toplantı / termin değişikliklerinde merkezi köprü bu sorguları geçersiz kılar → takvim kendini tazeler
+  const meetingsQuery = useMeetingsList({ pageSize: 200 });
+  const followupsQuery = useFollowups();
+  const meetingItems: MeetingListItem[] = useMemo(() => meetingsQuery.data?.items ?? [], [meetingsQuery.data]);
+  const followupItems: FollowupItemDto[] = useMemo(() => followupsQuery.data ?? [], [followupsQuery.data]);
+  const isLoading = meetingsQuery.isPending || followupsQuery.isPending;
 
   const events = useMemo(() => {
     const meetingEvents = meetingItems.map((m) => {
@@ -105,9 +95,9 @@ export function CalendarPage() {
   const handleEventClick = useCallback((info: { event: { extendedProps: Record<string, unknown> } }) => {
     const { type, meetingId } = info.event.extendedProps;
     if (type === "meeting" && meetingId) {
-      navigate(`/meetings/${meetingId}`);
+      navigate(`/meetings/${meetingId}`, { state: navFrom });
     }
-  }, [navigate]);
+  }, [navigate, navFrom]);
 
   async function handleCreate(payload: Record<string, unknown>) {
     try {
@@ -116,12 +106,12 @@ export function CalendarPage() {
         description: (payload.subject as string) || "",
         meetingDate: (payload.meetingDate as string) || new Date().toISOString().slice(0, 10),
       };
-      await createMeeting(dto);
+      await createMeeting(dto); // useCreateMeeting → takvim dahil tüm toplantı listeleri tazelenir
       setShowCreate(false);
-      const data = await fetchMeetings({ pageSize: 200 });
-      setMeetingItems(data.items);
+      toast.success("Toplantı başarıyla oluşturuldu");
     } catch (err) {
       console.error("[Calendar] Create error:", err);
+      toast.error("Toplantı oluşturulamadı");
     }
   }
 

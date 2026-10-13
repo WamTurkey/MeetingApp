@@ -6,7 +6,8 @@
  * form's dropdown auto-selects the new entry.
  */
 import { useState, useEffect, type FormEvent } from "react";
-import { Plus, Trash2, Pencil, X } from "lucide-react";
+import { Plus, Trash2, Pencil, X, Loader2 } from "lucide-react";
+import { EmptyState } from "@/shared/ui/EmptyState";
 import { Modal } from "@/shared/ui/Modal";
 import { Button } from "@/shared/ui/Button";
 import { toast } from "sonner";
@@ -41,6 +42,8 @@ export function CatalogModal({
   const [firmType, setFirmType] = useState<"INTERNAL" | "EXTERNAL">("EXTERNAL");
   const [error, setError] = useState("");
   const [editId, setEditId] = useState<number | null>(null);
+  const [deletingId, setDeletingId] = useState<number | null>(null);
+  const [isSaving, setIsSaving] = useState(false);
 
   // When editingItemId changes (e.g. from CatalogPage), populate the form
   useEffect(() => {
@@ -76,11 +79,13 @@ export function CatalogModal({
 
   async function handleSubmit(e: FormEvent) {
     e.preventDefault();
+    if (isSaving) return; // mükerrer gönderim koruması
     const nameField = fields.find((f) => f.key === "name");
     if (!formData.name?.trim()) {
       setError(`${nameField?.label?.replace(" *", "") || "Ad"} alanı zorunludur`);
       return;
     }
+    setIsSaving(true);
     try {
       const payload: Record<string, string | boolean> = { ...formData, isActive: active };
       if (kind === "companies") payload.firmType = firmType;
@@ -101,6 +106,8 @@ export function CatalogModal({
     } catch (err: any) {
       toast.error("Kaydedilirken bir hata oluştu");
       setError(err.message || "Kaydedilirken bir hata oluştu.");
+    } finally {
+      setIsSaving(false);
     }
   }
 
@@ -173,6 +180,7 @@ export function CatalogModal({
               type="submit"
               variant="primary"
               size="sm"
+              isLoading={isSaving}
               icon={editId ? <Pencil className="h-4 w-4" /> : <Plus className="h-4 w-4" />}
             >
               {editId ? "Güncelle" : "Kaydet"}
@@ -191,9 +199,7 @@ export function CatalogModal({
             Mevcut Kayıtlar ({items.length})
           </h3>
           {items.length === 0 ? (
-            <p className="py-6 text-center text-sm text-surface-400">
-              Henüz kayıt yok
-            </p>
+            <EmptyState compact message="Henüz kayıt yok" description="Yukarıdaki formu kullanarak ilk kaydı ekleyin." />
           ) : (
             <div className="overflow-hidden rounded-lg border border-surface-200 dark:border-surface-700">
               <table className="w-full text-sm">
@@ -252,14 +258,27 @@ export function CatalogModal({
                           </button>
                           <button
                             type="button"
+                            disabled={deletingId !== null}
+                            aria-busy={deletingId === item.id}
                             onClick={async () => {
-                              await remove(item.id);
-                              onDeleted?.();
+                              if (deletingId !== null) return;
+                              setDeletingId(item.id);
+                              try {
+                                await remove(item.id);
+                                toast.success("Kayıt silindi");
+                                onDeleted?.();
+                              } catch (err: any) {
+                                toast.error("Kayıt silinemedi", {
+                                  description: err?.response?.data?.message ?? "Kayıt başka verilerde kullanılıyor olabilir.",
+                                });
+                              } finally {
+                                setDeletingId(null);
+                              }
                             }}
-                            className="rounded-md p-1 text-surface-400 transition-colors hover:bg-danger-50 hover:text-danger-600 dark:hover:bg-danger-900/20"
+                            className="rounded-md p-1 text-surface-400 transition-colors hover:bg-danger-50 hover:text-danger-600 disabled:cursor-not-allowed disabled:opacity-50 dark:hover:bg-danger-900/20"
                             title="Sil"
                           >
-                            <Trash2 className="h-4 w-4" />
+                            {deletingId === item.id ? <Loader2 className="h-4 w-4 animate-spin" /> : <Trash2 className="h-4 w-4" />}
                           </button>
                         </div>
                       </td>

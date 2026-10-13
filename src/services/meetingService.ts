@@ -83,6 +83,11 @@ export async function addMeetingLink(meetingId: number, dto: CreateMeetingLinkRe
   return data;
 }
 
+/** Önceki toplantılardan seçilen açık takip maddelerini bu toplantıya devreder. */
+export async function rolloverItems(meetingId: number, followupIds: number[]): Promise<void> {
+  await apiClient.post(`/Meetings/${meetingId}/rollover-items`, followupIds);
+}
+
 export async function deleteMeetingLink(meetingId: number, linkId: number): Promise<void> {
   await apiClient.delete(`/meetings/${meetingId}/links/${linkId}`);
 }
