@@ -370,6 +370,7 @@ public class MeetingDbContext : DbContext
             e.Property(x => x.MimeType).HasMaxLength(100);
             e.Property(x => x.StoragePath).HasMaxLength(1000);
             e.Property(x => x.Description).HasMaxLength(500);
+            e.Property(x => x.Category).HasMaxLength(30);
             e.Property(x => x.CreatedAt).HasDefaultValueSql("SYSUTCDATETIME()");
             e.Property(x => x.UpdatedAt).HasDefaultValueSql("SYSUTCDATETIME()");
             e.Property(x => x.IsDeleted).HasDefaultValue(false);

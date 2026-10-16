@@ -8,7 +8,7 @@ namespace MeetingApp.API.Controllers;
 
 [ApiController]
 [Route("api/[controller]")]
-public class CategoriesController : ControllerBase
+public class CategoriesController : BaseApiController
 {
     private readonly MeetingDbContext _db;
     public CategoriesController(MeetingDbContext db) => _db = db;
@@ -29,7 +29,7 @@ public class CategoriesController : ControllerBase
     [HttpPost]
     public async Task<ActionResult<CategoryDto>> Create([FromBody] CreateCategoryDto dto)
     {
-        var e = new Category { Name = dto.Name, CreatedBy = 1 };
+        var e = new Category { Name = dto.Name, IsActive = dto.IsActive, CreatedBy = CurrentUserId };
         _db.Categories.Add(e); await _db.SaveChangesAsync();
         return CreatedAtAction(nameof(GetById), new { id = e.Id }, new CategoryDto(e.Id, e.Name, e.IsActive));
     }
@@ -40,7 +40,7 @@ public class CategoriesController : ControllerBase
         var x = await _db.Categories.FindAsync(id);
         if (x == null) return NotFound();
         x.Name = dto.Name; x.IsActive = dto.IsActive;
-        x.UpdatedBy = 1; x.UpdatedAt = DateTime.UtcNow;
+        x.UpdatedBy = CurrentUserId; x.UpdatedAt = DateTime.UtcNow;
         await _db.SaveChangesAsync();
         return Ok(new CategoryDto(x.Id, x.Name, x.IsActive));
     }
@@ -50,7 +50,7 @@ public class CategoriesController : ControllerBase
     {
         var x = await _db.Categories.FindAsync(id);
         if (x == null) return NotFound();
-        x.IsDeleted = true; x.DeletedAt = DateTime.UtcNow; x.DeletedBy = 1;
+        x.IsDeleted = true; x.DeletedAt = DateTime.UtcNow; x.DeletedBy = CurrentUserId;
         await _db.SaveChangesAsync(); return NoContent();
     }
 }

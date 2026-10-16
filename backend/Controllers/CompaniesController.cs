@@ -8,7 +8,7 @@ namespace MeetingApp.API.Controllers;
 
 [ApiController]
 [Route("api/[controller]")]
-public class CompaniesController : ControllerBase
+public class CompaniesController : BaseApiController
 {
     private readonly MeetingDbContext _db;
     public CompaniesController(MeetingDbContext db) => _db = db;
@@ -34,7 +34,7 @@ public class CompaniesController : ControllerBase
     [HttpPost]
     public async Task<ActionResult<CompanyDto>> Create([FromBody] CreateCompanyDto dto)
     {
-        var company = new Company { Name = dto.Name, ShortName = dto.ShortName, FirmType = dto.FirmType, CreatedBy = 1 };
+        var company = new Company { Name = dto.Name, ShortName = dto.ShortName, FirmType = dto.FirmType, IsActive = dto.IsActive, CreatedBy = CurrentUserId };
         _db.Companies.Add(company);
         await _db.SaveChangesAsync();
         return CreatedAtAction(nameof(GetById), new { id = company.Id },
@@ -50,7 +50,7 @@ public class CompaniesController : ControllerBase
         c.ShortName = dto.ShortName;
         c.IsActive = dto.IsActive;
         c.FirmType = dto.FirmType;
-        c.UpdatedBy = 1;
+        c.UpdatedBy = CurrentUserId;
         c.UpdatedAt = DateTime.UtcNow;
         await _db.SaveChangesAsync();
         return Ok(new CompanyDto(c.Id, c.Name, c.ShortName, c.IsActive, c.FirmType));
@@ -61,7 +61,7 @@ public class CompaniesController : ControllerBase
     {
         var c = await _db.Companies.FindAsync(id);
         if (c == null) return NotFound();
-        c.IsDeleted = true; c.DeletedAt = DateTime.UtcNow; c.DeletedBy = 1;
+        c.IsDeleted = true; c.DeletedAt = DateTime.UtcNow; c.DeletedBy = CurrentUserId;
         await _db.SaveChangesAsync();
         return NoContent();
     }

@@ -73,3 +73,6 @@ app.db-wal
 logs/
 temp/
 tmp/
+
+# Yüklenen toplantı ekleri (Kartvizit / Toplantı Görselleri)
+backend/App_Data/

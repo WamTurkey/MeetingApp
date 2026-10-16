@@ -165,14 +165,23 @@ using (var scope = app.Services.CreateScope())
                 (N'Saha Mühendisi'),(N'Enerji Mühendisi'),(N'İnşaat Mühendisi'),
                 (N'İş Geliştirme Uzmanı'),(N'Satış Müdürü'),(N'Kalite Sorumlusu'),(N'İK Uzmanı'),
                 (N'Mali İşler Müdürü'),(N'Muhasebe Sorumlusu'),(N'Hukuk Müşaviri'),(N'Danışman'),(N'Stajyer'),(N'Diğer')");
-                db.Database.ExecuteSqlRaw("UPDATE [dbo].[Users] SET [Role] = 'Admin' WHERE [Email] = 'admin@wam.com.tr' AND [Role] = 'User'");
-        // Reset admin password to admin123 — YALNIZCA Development ortamında.
-        // Production'da her açılışta admin şifresinin sıfırlanması kritik güvenlik açığıdır.
+        // ──── Ensure System User (Id = 1) exists ────
+        db.Database.ExecuteSqlRaw(@"
+            IF NOT EXISTS (SELECT 1 FROM [dbo].[Users] WHERE [Id] = 1)
+            BEGIN
+                SET IDENTITY_INSERT [dbo].[Users] ON;
+                INSERT INTO [dbo].[Users] ([Id], [Email], [FullName], [HashedPassword], [IsActive], [IsSuperuser], [Role], [CreatedAt], [UpdatedAt])
+                VALUES (1, 'system@wamturkey.com', N'Sistem Yöneticisi', '$2a$11$qR0M9Y8oF2l2iXJkP6qXQOF3mD2Xk7Q9rY1U8W9x9z5P7V3L1K8Gy', 1, 1, 'Admin', GETUTCDATE(), GETUTCDATE());
+                SET IDENTITY_INSERT [dbo].[Users] OFF;
+            END");
+
+        db.Database.ExecuteSqlRaw("UPDATE [dbo].[Users] SET [Role] = 'Admin' WHERE [Email] IN ('admin@wam.com.tr', 'bora.varol@wamturkey.com') AND [Role] <> 'Admin'");
+
+        // Reset passwords to admin123 — YALNIZCA Development ortamında.
         if (app.Environment.IsDevelopment())
         {
             var hash = BCrypt.Net.BCrypt.HashPassword("admin123");
-            // ExecuteSql (FormattableString) → değer SQL parametresi olarak gönderilir (EF1002 / SQL injection koruması)
-            db.Database.ExecuteSql($"UPDATE [dbo].[Users] SET [HashedPassword] = {hash} WHERE [Email] = 'admin@wam.com.tr'");
+            db.Database.ExecuteSql($"UPDATE [dbo].[Users] SET [HashedPassword] = {hash} WHERE [Email] IN ('admin@wam.com.tr', 'bora.varol@wamturkey.com', 'system@wamturkey.com')");
         }
 
         // ──── FirmType kolonu ────

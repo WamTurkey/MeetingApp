@@ -17,6 +17,7 @@ public class Attachment
     public string MimeType { get; set; } = null!;
     public string StoragePath { get; set; } = null!;
     public string? Description { get; set; }
+    public string? Category { get; set; }  // "BUSINESS_CARD", "MEETING_PHOTO"
     public int UploadedBy { get; set; }
     public DateTime CreatedAt { get; set; }
     public DateTime UpdatedAt { get; set; }

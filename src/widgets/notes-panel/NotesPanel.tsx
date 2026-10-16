@@ -1,5 +1,5 @@
 import { useState, useEffect } from "react";
-import { Plus, StickyNote, GripVertical } from "lucide-react";
+import { Plus, StickyNote, GripVertical, Mic } from "lucide-react";
 import { Button } from "@/shared/ui/Button";
 import { EmptyState } from "@/shared/ui/EmptyState";
 import { NoteRow } from "@/entities/note/ui/NoteRow";
@@ -7,6 +7,7 @@ import { AddNoteForm } from "@/features/note/AddNoteForm";
 import { DeleteNoteButton } from "@/features/note/DeleteNoteButton";
 import type { Note, NoteCreatePayload } from "@/entities/note/model";
 import { DragDropContext, Droppable, Draggable, type DropResult } from "@hello-pangea/dnd";
+import { VoiceRecorderPanel } from "@/features/voice-note";
 
 interface NotesPanelProps {
   notes: Note[];
@@ -29,6 +30,8 @@ export function NotesPanel({
 }: NotesPanelProps) {
   const [insertIndex, setInsertIndex] = useState<number | null>(null);
   const [selectedIndex, setSelectedIndex] = useState<number | null>(null);
+  const [showVoiceRecorder, setShowVoiceRecorder] = useState(false);
+  const [draftNoteContent, setDraftNoteContent] = useState("");
 
   useEffect(() => {
     const handleKeyDown = (e: KeyboardEvent) => {
@@ -61,6 +64,7 @@ export function NotesPanel({
     } else {
       await onAddNote?.(data);
     }
+    setDraftNoteContent("");
   }
 
   function handleDragEnd(result: DropResult) {
@@ -85,23 +89,51 @@ export function NotesPanel({
         <div className="flex items-center gap-2">
           <StickyNote className="h-5 w-5 text-fg-muted" />
           <h3 className="font-semibold text-fg">
-            Notlar & Tutanaklar
+            Notlar
           </h3>
           <span className="rounded-full bg-bg-muted px-2 py-0.5 text-xs font-medium text-fg-secondary">
             {notes.length}
           </span>
         </div>
         {editable && (
-          <Button
-            variant="primary"
-            size="sm"
-            icon={<Plus className="h-3.5 w-3.5" />}
-            onClick={() => setInsertIndex(-1)}
-          >
-            Not Ekle
-          </Button>
+          <div className="flex items-center gap-2">
+            <Button
+              variant="outline"
+              size="sm"
+              className="border-rose-300 bg-rose-50/80 text-rose-700 hover:bg-rose-100 hover:border-rose-400 dark:border-rose-900/60 dark:bg-rose-950/40 dark:text-rose-300 font-medium shadow-xs"
+              icon={<Mic className="h-4 w-4 text-rose-600 dark:text-rose-400 animate-pulse" />}
+              onClick={() => setShowVoiceRecorder(!showVoiceRecorder)}
+            >
+              {showVoiceRecorder ? "Ses Kaydını Kapat" : "🎤 Sesle Not Yazdır"}
+            </Button>
+            <Button
+              variant="primary"
+              size="sm"
+              icon={<Plus className="h-3.5 w-3.5" />}
+              onClick={() => setInsertIndex(-1)}
+            >
+              Not Ekle
+            </Button>
+          </div>
         )}
       </div>
+
+      {/* Voice Recorder Panel */}
+      {showVoiceRecorder && (
+        <div className="p-4 border-b border-border-muted bg-surface-50/50 dark:bg-surface-900/30">
+          <VoiceRecorderPanel
+            meetingId={meetingId}
+            onTransferText={(text) => {
+              setDraftNoteContent(text);
+              setInsertIndex(-1);
+            }}
+            onSaveAsNote={async (text) => {
+              await onAddNote?.({ content: text, noteType: "NOTE" });
+            }}
+            onClose={() => setShowVoiceRecorder(false)}
+          />
+        </div>
+      )}
 
       {/* Note list and Add Form Container */}
       <div className="p-0">
@@ -120,8 +152,12 @@ export function NotesPanel({
               <div className="w-full">
                 <AddNoteForm
                   meetingId={meetingId}
+                  initialContent={draftNoteContent}
                   onSubmit={handleAdd}
-                  onCancel={() => setInsertIndex(null)}
+                  onCancel={() => {
+                    setInsertIndex(null);
+                    setDraftNoteContent("");
+                  }}
                 />
               </div>
             )}
@@ -216,8 +252,12 @@ export function NotesPanel({
               <div className="w-full">
                 <AddNoteForm
                   meetingId={meetingId}
+                  initialContent={draftNoteContent}
                   onSubmit={handleAdd}
-                  onCancel={() => setInsertIndex(null)}
+                  onCancel={() => {
+                    setInsertIndex(null);
+                    setDraftNoteContent("");
+                  }}
                 />
               </div>
             )}

@@ -2,7 +2,18 @@ import type { MeetingStatus } from "@/shared/config/constants";
 import { useState, useMemo } from "react";
 import { useQueryClient } from "@tanstack/react-query";
 import { useParams, useNavigate, Link } from "react-router-dom";
-import { ArrowLeft, Pencil, FileText, Loader2 } from "lucide-react";
+import {
+  ArrowLeft,
+  Pencil,
+  FileText,
+  Loader2,
+  Users,
+  Gavel,
+  Camera,
+  Download,
+  FileSpreadsheet,
+  Mic,
+} from "lucide-react";
 import { Button } from "@/shared/ui/Button";
 import { toast } from "sonner";
 import { Card, CardContent } from "@/shared/ui/Card";
@@ -14,6 +25,9 @@ import type { Meeting } from "@/entities/meeting/model";
 import type { Note, NoteCreatePayload } from "@/entities/note/model";
 import type { Participant, ParticipantCreatePayload } from "@/entities/participant/model";
 import { NotesPanel } from "@/widgets/notes-panel/NotesPanel";
+import { DecisionsPanel } from "@/widgets/decisions-panel";
+import { MeetingAttachmentsPanel } from "@/widgets/meeting-attachments";
+import { SavedVoiceNotesPanel } from "@/widgets/voice-notes";
 import { ParticipantsPanel } from "@/widgets/participants-panel/ParticipantsPanel";
 import { MeetingLinksPanel } from "@/widgets/meeting-links/MeetingLinksPanel";
 import { MeetingPrepPanel } from "@/widgets/meeting-prep/MeetingPrepPanel";
@@ -25,6 +39,7 @@ import type { MeetingDetail, NoteDto, ParticipantDto } from "@/types/api";
 import { meetingKeys } from "@/shared/api/queryKeys";
 import { useNavFrom, useSmartBack, useUrlParams } from "@/shared/lib/navigation";
 import { useMeetingDetail } from "@/entities/meeting/api/queries";
+import apiClient from "@/services/apiClient";
 import {
   patchMeetingDetail,
   useAddNote,
@@ -38,14 +53,24 @@ import {
   useUpdateNote,
 } from "@/entities/meeting/api/mutations";
 
-type TabKey = "notes" | "participants" | "links" | "info" | "minutes" | "prep";
+type TabKey =
+  | "notes"
+  | "participants"
+  | "decisions"
+  | "voiceNotes"
+  | "attachments"
+  | "links"
+  | "info"
+  | "prep";
 
 const TABS: { key: TabKey; label: string; icon: React.ReactNode }[] = [
   { key: "notes", label: "Notlar", icon: <FileText className="h-4 w-4" /> },
-  { key: "participants", label: "Katılımcılar", icon: null },
+  { key: "participants", label: "Katılımcılar", icon: <Users className="h-4 w-4" /> },
+  { key: "decisions", label: "Alınan Kararlar", icon: <Gavel className="h-4 w-4" /> },
+  { key: "voiceNotes", label: "Sesli Notlar", icon: <Mic className="h-4 w-4 text-rose-500" /> },
+  { key: "attachments", label: "Ekler & Görseller", icon: <Camera className="h-4 w-4" /> },
   { key: "links", label: "Bağlı Toplantılar", icon: null },
   { key: "info", label: "Detaylar", icon: null },
-  { key: "minutes", label: "Tutanak", icon: null },
   { key: "prep", label: "Hazırlık", icon: null },
 ];
 
@@ -120,6 +145,8 @@ export function MeetingDetailPage() {
   // Geri: geldiği sayfaya (Takip & Terminler + açık modal, Takvim, Dashboard…) — doğrudan açıldıysa Toplantılar
   const { goBack, label: backLabel } = useSmartBack("/meetings", "Toplantılar");
   const [showEdit, setShowEdit] = useState(false);
+  const [isExportingPdf, setIsExportingPdf] = useState(false);
+  const [isExportingExcel, setIsExportingExcel] = useState(false);
 
   const qc = useQueryClient();
   const detailQuery = useMeetingDetail(meetingId);
@@ -130,10 +157,61 @@ export function MeetingDetailPage() {
 
   const meeting = useMemo<Meeting | null>(() => (detail ? toMeeting(detail) : null), [detail]);
   const notes = useMemo<Note[]>(() => detail?.notes.map(toNoteStable) ?? [], [detail?.notes]);
+  const decisions = useMemo(() => notes.filter((n) => n.noteType === "DECISION"), [notes]);
   const participants = useMemo<Participant[]>(
     () => detail?.participants.map(toParticipant) ?? [],
     [detail?.participants],
   );
+
+  async function handleExportPdf() {
+    if (!meeting) return;
+    setIsExportingPdf(true);
+    try {
+      const { data: blob } = await apiClient.get<Blob>(`/meetings/${meeting.id}/export/pdf`, {
+        responseType: "blob",
+        timeout: 60_000,
+      });
+      const downloadUrl = window.URL.createObjectURL(blob);
+      const a = document.createElement("a");
+      a.href = downloadUrl;
+      a.download = `Tutanak_${meeting.id}_${new Date().toISOString().split("T")[0]}.pdf`;
+      document.body.appendChild(a);
+      a.click();
+      a.remove();
+      window.URL.revokeObjectURL(downloadUrl);
+      toast.success("PDF başarıyla indirildi");
+    } catch (err) {
+      console.error("PDF Export error:", err);
+      toast.error("PDF oluşturulamadı. Lütfen tekrar deneyin.");
+    } finally {
+      setIsExportingPdf(false);
+    }
+  }
+
+  async function handleExportExcel() {
+    if (!meeting) return;
+    setIsExportingExcel(true);
+    try {
+      const { data: blob } = await apiClient.get<Blob>(`/meetings/${meeting.id}/export/excel`, {
+        responseType: "blob",
+        timeout: 60_000,
+      });
+      const downloadUrl = window.URL.createObjectURL(blob);
+      const a = document.createElement("a");
+      a.href = downloadUrl;
+      a.download = `Tutanak_${meeting.id}_${new Date().toISOString().split("T")[0]}.xlsx`;
+      document.body.appendChild(a);
+      a.click();
+      a.remove();
+      window.URL.revokeObjectURL(downloadUrl);
+      toast.success("Excel başarıyla indirildi");
+    } catch (err) {
+      console.error("Excel Export error:", err);
+      toast.error("Excel oluşturulamadı. Lütfen tekrar deneyin.");
+    } finally {
+      setIsExportingExcel(false);
+    }
+  }
 
   const updateNoteMutation = useUpdateNote(meetingId);
   const deleteNoteMutation = useDeleteNote(meetingId);
@@ -270,7 +348,31 @@ export function MeetingDetailPage() {
         <Button variant="ghost" size="sm" icon={<ArrowLeft className="h-4 w-4" />} onClick={goBack}>{backLabel}</Button>
         <div className="flex items-center gap-2 flex-wrap">
           {editable && (<Button variant="outline" size="icon" icon={<Pencil className="h-4 w-4" />} onClick={() => setShowEdit(true)} title="Düzenle" />)}
-          <Link to={`/meetings/${meetingId}/minutes`} state={navFrom}><Button variant="outline" size="sm" icon={<FileText className="h-4 w-4" />}>Tutanak Önizle</Button></Link>
+          <Button
+            variant="outline"
+            size="sm"
+            icon={isExportingPdf ? <Loader2 className="h-4 w-4 animate-spin" /> : <Download className="h-4 w-4" />}
+            onClick={handleExportPdf}
+            disabled={isExportingPdf}
+            title="Tutanak PDF Doğrudan İndir"
+          >
+            {isExportingPdf ? "İndiriliyor..." : "PDF İndir"}
+          </Button>
+          <Button
+            variant="outline"
+            size="sm"
+            icon={isExportingExcel ? <Loader2 className="h-4 w-4 animate-spin" /> : <FileSpreadsheet className="h-4 w-4" />}
+            onClick={handleExportExcel}
+            disabled={isExportingExcel}
+            title="Tutanak Excel Doğrudan İndir"
+          >
+            {isExportingExcel ? "İndiriliyor..." : "Excel İndir"}
+          </Button>
+          <Link to={`/meetings/${meetingId}/minutes`} state={navFrom}>
+            <Button variant="outline" size="sm" icon={<FileText className="h-4 w-4" />}>
+              Tutanak Önizle
+            </Button>
+          </Link>
           <StartMeetingButton meeting={meeting} onStart={handleStart} />
           <EndMeetingButton meeting={meeting} onEnd={handleEnd} />
           <DeleteMeetingButton meeting={meeting} onDelete={handleDelete} />
@@ -304,53 +406,152 @@ export function MeetingDetailPage() {
               </div>
             </div>
           </div>
+
+          {/* Quick 3-Section Summary Bar */}
+          <div className="mt-5 grid grid-cols-1 gap-2.5 border-t border-border-muted pt-4 sm:grid-cols-3">
+            <button
+              type="button"
+              onClick={() => setActiveTab("notes")}
+              className="flex items-center justify-between rounded-lg border border-border/60 bg-surface-50/50 px-3.5 py-2 text-left transition hover:border-brand-300 hover:bg-surface-100 dark:bg-surface-900/40 dark:hover:bg-surface-800"
+            >
+              <div className="flex items-center gap-2">
+                <FileText className="h-4 w-4 text-brand-600 dark:text-brand-400" />
+                <span className="text-xs font-semibold text-surface-700 dark:text-surface-200">1. Notlar</span>
+              </div>
+              <span className="rounded-full bg-surface-200 px-2 py-0.5 text-2xs font-bold text-surface-800 dark:bg-surface-700 dark:text-surface-200">
+                {notes.length}
+              </span>
+            </button>
+
+            <button
+              type="button"
+              onClick={() => setActiveTab("participants")}
+              className="flex items-center justify-between rounded-lg border border-border/60 bg-surface-50/50 px-3.5 py-2 text-left transition hover:border-brand-300 hover:bg-surface-100 dark:bg-surface-900/40 dark:hover:bg-surface-800"
+            >
+              <div className="flex items-center gap-2">
+                <Users className="h-4 w-4 text-brand-600 dark:text-brand-400" />
+                <span className="text-xs font-semibold text-surface-700 dark:text-surface-200">2. Katılımcılar</span>
+              </div>
+              <span className="rounded-full bg-surface-200 px-2 py-0.5 text-2xs font-bold text-surface-800 dark:bg-surface-700 dark:text-surface-200">
+                {participants.length}
+              </span>
+            </button>
+
+            <button
+              type="button"
+              onClick={() => setActiveTab("decisions")}
+              className="flex items-center justify-between rounded-lg border border-border/60 bg-surface-50/50 px-3.5 py-2 text-left transition hover:border-brand-300 hover:bg-surface-100 dark:bg-surface-900/40 dark:hover:bg-surface-800"
+            >
+              <div className="flex items-center gap-2">
+                <Gavel className="h-4 w-4 text-brand-600 dark:text-brand-400" />
+                <span className="text-xs font-semibold text-surface-700 dark:text-surface-200">3. Alınan Kararlar</span>
+              </div>
+              <span className="rounded-full bg-brand-100 px-2 py-0.5 text-2xs font-bold text-brand-700 dark:bg-brand-900/60 dark:text-brand-300">
+                {decisions.length}
+              </span>
+            </button>
+          </div>
         </CardContent>
       </Card>
 
       {/* Tab navigation */}
       <div className="flex gap-1 overflow-x-auto rounded-xl bg-surface-100 p-1 dark:bg-surface-800">
         {TABS.map((tab) => (
-          <button key={tab.key} onClick={() => setActiveTab(tab.key)}
-            className={cn("flex items-center gap-1.5 whitespace-nowrap rounded-lg px-4 py-2 text-sm font-medium transition-all duration-150",
-              activeTab === tab.key ? "bg-white text-brand-700 shadow-sm dark:bg-surface-700 dark:text-brand-400" : "text-surface-500 hover:text-surface-700 dark:text-surface-400 dark:hover:text-surface-200")}>
+          <button
+            key={tab.key}
+            onClick={() => setActiveTab(tab.key)}
+            className={cn(
+              "flex items-center gap-1.5 whitespace-nowrap rounded-lg px-4 py-2 text-sm font-medium transition-all duration-150",
+              activeTab === tab.key
+                ? "bg-white text-brand-700 shadow-sm dark:bg-surface-700 dark:text-brand-400"
+                : "text-surface-500 hover:text-surface-700 dark:text-surface-400 dark:hover:text-surface-200"
+            )}
+          >
             {tab.icon} {tab.label}
-            {tab.key === "notes" && <span className="ml-1 rounded-full bg-surface-200 px-1.5 py-0.5 text-2xs dark:bg-surface-600">{notes.length}</span>}
-            {tab.key === "participants" && <span className="ml-1 rounded-full bg-surface-200 px-1.5 py-0.5 text-2xs dark:bg-surface-600">{participants.length}</span>}
+            {tab.key === "notes" && (
+              <span className="ml-1 rounded-full bg-surface-200 px-1.5 py-0.5 text-2xs dark:bg-surface-600">
+                {notes.length}
+              </span>
+            )}
+            {tab.key === "decisions" && (
+              <span className="ml-1 rounded-full bg-brand-100 px-1.5 py-0.5 text-2xs font-semibold text-brand-700 dark:bg-brand-900/60 dark:text-brand-300">
+                {decisions.length}
+              </span>
+            )}
+            {tab.key === "participants" && (
+              <span className="ml-1 rounded-full bg-surface-200 px-1.5 py-0.5 text-2xs dark:bg-surface-600">
+                {participants.length}
+              </span>
+            )}
           </button>
         ))}
       </div>
 
       {/* Tab content */}
       {activeTab === "notes" && (
-        <NotesPanel notes={notes} meetingId={meetingId} editable={editable} onAddNote={handleAddNote} onUpdateNote={handleUpdateNote} onDeleteNote={handleDeleteNote} onReorderNotes={handleReorderNotes} />
+        <NotesPanel
+          notes={notes}
+          meetingId={meetingId}
+          editable={editable}
+          onAddNote={handleAddNote}
+          onUpdateNote={handleUpdateNote}
+          onDeleteNote={handleDeleteNote}
+          onReorderNotes={handleReorderNotes}
+        />
       )}
       {activeTab === "participants" && (
-        <ParticipantsPanel participants={participants} meetingId={meetingId} editable={editable} onAddMultiple={handleAddParticipants} onRemove={handleRemoveParticipant} onToggleAttendance={handleToggleAttendance} />
+        <ParticipantsPanel
+          participants={participants}
+          meetingId={meetingId}
+          editable={editable}
+          onAddMultiple={handleAddParticipants}
+          onRemove={handleRemoveParticipant}
+          onToggleAttendance={handleToggleAttendance}
+        />
+      )}
+      {activeTab === "decisions" && (
+        <DecisionsPanel
+          notes={notes}
+          meetingId={meetingId}
+          editable={editable}
+          onAddNote={handleAddNote}
+          onUpdateNote={handleUpdateNote}
+          onDeleteNote={handleDeleteNote}
+        />
+      )}
+      {activeTab === "voiceNotes" && (
+        <SavedVoiceNotesPanel
+          meetingId={meetingId}
+          editable={editable}
+          onAddToNotes={async (text) => {
+            await handleAddNote({ content: text, noteType: "NOTE" });
+          }}
+        />
+      )}
+      {activeTab === "attachments" && (
+        <MeetingAttachmentsPanel
+          meetingId={meetingId}
+          editable={editable}
+        />
       )}
       {activeTab === "links" && <MeetingLinksPanel meeting={meeting} />}
       {activeTab === "info" && (
-        <Card><CardContent className="space-y-4">
-          {[
-            ["Gündem", meeting.subject ?? meeting.description ?? "Belirtilmedi"],
-            ["Planlanan Saat", meeting.plannedStart ?? "Belirtilmedi"],
-            ["Başlangıç", meeting.startedAt ? new Date(meeting.startedAt).toLocaleString("tr-TR") : "Henüz başlamadı"],
-            ["Bitiş", meeting.endedAt ? new Date(meeting.endedAt).toLocaleString("tr-TR") : "Henüz bitmedi"],
-            ["Sonraki Toplantı", meeting.nextMeetingAt ? new Date(meeting.nextMeetingAt).toLocaleString("tr-TR") : "Belirtilmedi"],
-          ].map(([label, value]) => (
-            <div key={label}>
-              <p className="text-xs font-semibold uppercase tracking-wider text-surface-400">{label}</p>
-              <p className="mt-1 text-sm text-surface-800 dark:text-surface-200">{value}</p>
-            </div>
-          ))}
-        </CardContent></Card>
-      )}
-      {activeTab === "minutes" && (
-        <Card><CardContent className="py-12 text-center">
-          <FileText className="mx-auto h-12 w-12 text-surface-300 dark:text-surface-600" />
-          <h3 className="mt-4 font-semibold text-surface-900 dark:text-surface-50">Tutanak Editörü</h3>
-          <p className="mt-2 text-sm text-surface-500 dark:text-surface-400">Yapılandırılmış tutanak düzenleyici ileride bu alana entegre edilecektir.</p>
-          <Link to={`/meetings/${meetingId}/minutes`} state={navFrom}><Button variant="primary" className="mt-4">Önizlemeye Git</Button></Link>
-        </CardContent></Card>
+        <Card>
+          <CardContent className="space-y-4">
+            {[
+              ["Gündem", meeting.subject ?? meeting.description ?? "Belirtilmedi"],
+              ["Planlanan Saat", meeting.plannedStart ?? "Belirtilmedi"],
+              ["Başlangıç", meeting.startedAt ? new Date(meeting.startedAt).toLocaleString("tr-TR") : "Henüz başlamadı"],
+              ["Bitiş", meeting.endedAt ? new Date(meeting.endedAt).toLocaleString("tr-TR") : "Henüz bitmedi"],
+              ["Sonraki Toplantı", meeting.nextMeetingAt ? new Date(meeting.nextMeetingAt).toLocaleString("tr-TR") : "Belirtilmedi"],
+            ].map(([label, value]) => (
+              <div key={label}>
+                <p className="text-xs font-semibold uppercase tracking-wider text-surface-400">{label}</p>
+                <p className="mt-1 text-sm text-surface-800 dark:text-surface-200">{value}</p>
+              </div>
+            ))}
+          </CardContent>
+        </Card>
       )}
       {activeTab === "prep" && <MeetingPrepPanel meetingId={meetingId} />}
 

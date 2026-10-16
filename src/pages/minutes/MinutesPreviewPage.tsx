@@ -156,19 +156,9 @@ export function MinutesPreviewPage() {
             <div className="flex gap-2"><span className="w-4">1</span><span>{meeting.description || "-"}</span></div>
           </div>
 
-          {/* Decisions */}
+          {/* 1. Notlar (Eski adı Önemli Notlar) */}
           <div className="border-b-[3px] border-surface-400 p-2">
-            <div className="font-bold mb-1">ALINAN KARARLAR</div>
-            {decisions.length > 0 ? decisions.map((d, i) => (
-              <div key={d.id} className="flex gap-2"><span className="w-4">{i + 1}</span><span>{d.content}</span></div>
-            )) : (
-              <div className="flex gap-2"><span className="w-4">1</span><span>-</span></div>
-            )}
-          </div>
-
-          {/* Important Notes / Tasks */}
-          <div className="border-b-[3px] border-surface-400 p-2">
-            <div className="font-bold mb-1">ÖNEMLİ NOTLAR:</div>
+            <div className="font-bold mb-1">NOTLAR</div>
             {notes.filter(n => n.noteType !== "DECISION").length > 0 ? notes.filter(n => n.noteType !== "DECISION").map((n, i) => (
               <div key={n.id} className="flex gap-2">
                 <span className="w-4">{i + 1}</span>
@@ -179,7 +169,17 @@ export function MinutesPreviewPage() {
             )}
           </div>
 
-          {/* Next Meeting */}
+          {/* 2. Alınan Kararlar */}
+          <div className="border-b-[3px] border-surface-400 p-2">
+            <div className="font-bold mb-1">ALINAN KARARLAR</div>
+            {decisions.length > 0 ? decisions.map((d, i) => (
+              <div key={d.id} className="flex gap-2"><span className="w-4">{i + 1}</span><span>{d.content}</span></div>
+            )) : (
+              <div className="flex gap-2"><span className="w-4">1</span><span>-</span></div>
+            )}
+          </div>
+
+          {/* 3. Bir Sonraki Toplantı */}
           <div className="p-2">
             <div className="font-bold mb-1">BİR SONRAKİ TOPLANTI</div>
             <div className="flex gap-2">

@@ -14,7 +14,7 @@ namespace MeetingApp.API.Controllers;
 
 [ApiController]
 [Route("api/[controller]")]
-public class MeetingsController : ControllerBase
+public class MeetingsController : BaseApiController
 {
     private readonly MeetingDbContext _db;
     private readonly OutlookCalendarService _outlook;
@@ -154,7 +154,7 @@ public class MeetingsController : ControllerBase
             LocationId = dto.LocationId,
             CategoryId = dto.CategoryId,
             NextMeetingNote = dto.NextMeetingNote,
-            CreatedBy = 1  // TODO: JWT'den alınacak
+            CreatedBy = CurrentUserId
         };
 
         _db.Meetings.Add(meeting);
@@ -182,7 +182,7 @@ public class MeetingsController : ControllerBase
         meeting.CategoryId = dto.CategoryId;
         meeting.NextMeetingAt = !string.IsNullOrEmpty(dto.NextMeetingAt) ? DateTime.Parse(dto.NextMeetingAt) : null;
         meeting.NextMeetingNote = dto.NextMeetingNote;
-        meeting.UpdatedBy = 1;  // TODO: JWT'den alınacak
+        meeting.UpdatedBy = CurrentUserId;
         meeting.UpdatedAt = DateTime.UtcNow;
         meeting.Version++;
 
@@ -276,6 +276,12 @@ public class MeetingsController : ControllerBase
     public async Task<ActionResult<ParticipantDto>> AddParticipant(int id, [FromBody] AddParticipantDto dto)
     {
         if (!await _db.Meetings.AnyAsync(m => m.Id == id)) return NotFound();
+        if (!await _db.LkParticipantRoles.AnyAsync(r => r.RoleCode == dto.Role))
+            return BadRequest(new { message = $"Geçersiz katılımcı rolü: '{dto.Role}'." });
+        if (!await _db.Persons.AnyAsync(p => p.Id == dto.PersonId))
+            return BadRequest(new { message = "Seçilen kişi bulunamadı." });
+        if (await _db.MeetingParticipants.AnyAsync(x => x.MeetingId == id && x.PersonId == dto.PersonId))
+            return Conflict(new { message = "Bu kişi zaten bu toplantıya katılımcı olarak eklenmiş." });
 
         var participant = new MeetingParticipant
         {
@@ -283,7 +289,7 @@ public class MeetingsController : ControllerBase
             PersonId = dto.PersonId,
             Role = dto.Role,
             IsAttended = true, // Default as requested
-            CreatedBy = 1
+            CreatedBy = CurrentUserId
         };
         _db.MeetingParticipants.Add(participant);
         await _db.SaveChangesAsync();
@@ -307,7 +313,7 @@ public class MeetingsController : ControllerBase
         if (p == null) return NotFound();
         
         p.IsAttended = isAttended;
-        p.UpdatedBy = int.Parse(User.FindFirst(System.Security.Claims.ClaimTypes.NameIdentifier)?.Value ?? "1");
+        p.UpdatedBy = CurrentUserId;
         p.UpdatedAt = DateTime.UtcNow;
         
         await _db.SaveChangesAsync();
@@ -342,7 +348,7 @@ public class MeetingsController : ControllerBase
             ResponsiblePersonId = dto.ResponsiblePersonId,
             DueDate = !string.IsNullOrEmpty(dto.DueDate) ? DateOnly.Parse(dto.DueDate) : null,
             ActionStatus = string.IsNullOrWhiteSpace(dto.ActionStatus) ? null : NoteFollowupSync.NormalizeStatus(dto.ActionStatus),
-            CreatedBy = 1
+            CreatedBy = CurrentUserId
         };
         _db.Notes.Add(note);
         await _db.SaveChangesAsync();
@@ -350,7 +356,7 @@ public class MeetingsController : ControllerBase
         // ────────────────────────────
         // TAKİP/TERMİN ENTEGRASYONU (bkz. NoteFollowupSync kuralları)
         // ────────────────────────────
-        await NoteFollowupSync.SyncFromNoteAsync(_db, note, note.CreatedBy);
+        await NoteFollowupSync.SyncFromNoteAsync(_db, note, CurrentUserId);
         await _db.SaveChangesAsync();
 
         var n = await _db.Notes
@@ -380,14 +386,14 @@ public class MeetingsController : ControllerBase
         note.ResponsiblePersonId = dto.ResponsiblePersonId;
         note.DueDate = !string.IsNullOrEmpty(dto.DueDate) ? DateOnly.Parse(dto.DueDate) : null;
         note.ActionStatus = string.IsNullOrWhiteSpace(dto.ActionStatus) ? null : NoteFollowupSync.NormalizeStatus(dto.ActionStatus);
-        note.UpdatedBy = 1;
+        note.UpdatedBy = CurrentUserId;
         note.UpdatedAt = DateTime.UtcNow;
 
         // ────────────────────────────
         // TAKİP/TERMİN ENTEGRASYONU GÜNCELLEMESİ — tek SaveChanges ile atomik
         // (Eski satır içi mantık "CLOSED" gibi LK_ActionStatus'ta olmayan bir kod yazıp FK hatasına yol açıyordu.)
         // ────────────────────────────
-        await NoteFollowupSync.SyncFromNoteAsync(_db, note, 1);
+        await NoteFollowupSync.SyncFromNoteAsync(_db, note, CurrentUserId);
         await _db.SaveChangesAsync();
 
 
@@ -411,9 +417,9 @@ public class MeetingsController : ControllerBase
         if (note == null) return NotFound();
         note.IsDeleted = true;
         note.DeletedAt = DateTime.UtcNow;
-        note.DeletedBy = 1;
+        note.DeletedBy = CurrentUserId;
         // Bağlı takip kaydı da soft-delete (Takip & Terminler'de "hayalet" kayıt kalmasın)
-        await NoteFollowupSync.CascadeDeleteAsync(_db, note.Id, 1);
+        await NoteFollowupSync.CascadeDeleteAsync(_db, note.Id, CurrentUserId);
         await _db.SaveChangesAsync();
         return NoContent();
     }
@@ -446,7 +452,7 @@ public class MeetingsController : ControllerBase
             ParentMeetingId = id,
             ChildMeetingId = dto.ChildMeetingId,
             RelationType = dto.RelationType,
-            CreatedBy = 1
+            CreatedBy = CurrentUserId
         };
         _db.MeetingLinks.Add(link);
         await _db.SaveChangesAsync();
@@ -672,11 +678,14 @@ public class MeetingsController : ControllerBase
             MeetingId = m.Id,
             Title = m.Title ?? string.Empty,
             Subject = m.Subject ?? string.Empty,
+            Description = m.Description ?? string.Empty,
             MeetingDate = m.MeetingDate,
             MeetingTime = m.PlannedStart,
             LocationName = m.Location?.Name ?? "-",
             ProjectName = m.Project?.Name ?? "-",
             CategoryName = m.Category?.Name ?? "-",
+            NextMeetingAt = m.NextMeetingAt,
+            NextMeetingNote = m.NextMeetingNote,
             // Fallback: gündemsiz toplantıda boş liste (null değil)
             Notes = (m.Notes ?? new List<Note>())
                 .Where(n => n != null)
@@ -688,6 +697,14 @@ public class MeetingsController : ControllerBase
         var participants = (m.Participants ?? new List<MeetingParticipant>())
             .Where(p => p != null && p.Person != null)
             .ToList();
+
+        dto.Participants = participants.Select(p => new ExportParticipantDto
+        {
+            CompanyName = p.Person?.Company?.Name ?? "",
+            RoleName = p.RoleNavigation?.DisplayName ?? p.Role ?? "",
+            Title = p.Person?.Title ?? "",
+            FullName = p.Person?.FullName ?? ""
+        }).ToList();
 
         dto.InternalParticipants = participants
             .Where(p => (p.Person?.Company?.FirmType ?? "EXTERNAL") == "INTERNAL")
@@ -721,128 +738,297 @@ public class MeetingsController : ControllerBase
         using var workbook = new XLWorkbook();
         var ws = workbook.Worksheets.Add("Toplantı Tutanağı");
 
-        ws.Cell("A1").Value = "TOPLANTI TUTANAĞI";
-        ws.Range("A1:E1").Merge().Style
-            .Font.SetBold().Font.SetFontSize(16)
-            .Alignment.SetHorizontal(XLAlignmentHorizontalValues.Center)
-            .Fill.SetBackgroundColor(XLColor.LightGray);
+        var fontName = "Calibri";
+        var sectionBorder = XLBorderStyleValues.Medium;
+        var thinBorder = XLBorderStyleValues.Thin;
+        var borderColor = XLColor.FromHtml("#4B5563");
+        var headerBg = XLColor.FromHtml("#E2E8F0");
+        var headerFontColor = XLColor.FromHtml("#0F172A");
+        var dataRowBg = XLColor.FromHtml("#F2F2F2");
 
-        ws.Cell("A2").Value = "Toplantı Konusu:";
-        ws.Cell("B2").Value = dto.Title;
-        ws.Range("B2:E2").Merge();
-        
-        ws.Cell("A3").Value = "Tarih / Saat:";
-        ws.Cell("B3").Value = dto.MeetingDate?.ToString("dd.MM.yyyy") + (dto.MeetingTime.HasValue ? $" / {dto.MeetingTime.Value.ToString("HH\\:mm")}" : "");
-        ws.Range("B3:E3").Merge();
+        // Sütun genişlikleri: Kurumsal A4 şablonuna ve önizlemeye birebir uyumlu
+        ws.Column(1).Width = 5.0;  // Sıra No
+        ws.Column(2).Width = 56.0; // Sol sütun: Başlık / Konu / Katılımcı Firma & Unvan
+        ws.Column(3).Width = 46.0; // Sağ sütun: Toplantı Adı / Tarih-Saat / Ad Soyad
 
-        ws.Cell("A4").Value = "Yer:";
-        ws.Cell("B4").Value = dto.LocationName;
-        ws.Range("B4:E4").Merge();
+        int row = 1;
 
-        ws.Cell("A5").Value = "Proje / Kategori:";
-        ws.Cell("B5").Value = $"{dto.ProjectName} / {dto.CategoryName}";
-        ws.Range("B5:E5").Merge();
+        // ═══════════════════════════════════════════════════════════════
+        // 1. TOPLANTININ KONUSU
+        // ═══════════════════════════════════════════════════════════════
+        int block1Start = row;
 
-        ws.Range("A2:E5").Style.Border.OutsideBorder = XLBorderStyleValues.Thin;
-        ws.Range("A2:A5").Style.Font.SetBold();
+        // Satır 1: Başlık & Toplantı Başlığı + Tarih
+        ws.Cell(row, 1).Value = "TOPLANTININ KONUSU";
+        ws.Range(row, 1, row, 2).Merge();
+        ws.Cell(row, 1).Style.Font.SetBold(true).Font.SetFontSize(10.5).Font.SetFontColor(headerFontColor);
+        ws.Cell(row, 1).Style.Alignment.SetVertical(XLAlignmentVerticalValues.Center);
 
-        int row = 7;
+        var dateStr = dto.MeetingDate?.ToString("dd.MM.yyyy") ?? "";
+        var titleStr = !string.IsNullOrWhiteSpace(dto.Title) ? dto.Title : dto.Subject;
+        var fullTitle = !string.IsNullOrWhiteSpace(dateStr) ? $"{titleStr} | {dateStr}" : titleStr;
+        ws.Cell(row, 3).Value = fullTitle;
+        ws.Cell(row, 3).Style.Font.SetBold(true).Font.SetFontSize(10.5).Font.SetFontColor(headerFontColor);
+        ws.Cell(row, 3).Style.Alignment.SetVertical(XLAlignmentVerticalValues.Center).Alignment.SetWrapText(true);
+        ws.Range(row, 1, row, 3).Style.Fill.SetBackgroundColor(headerBg);
+        ws.Row(row).Height = fullTitle.Length > 45 ? 32 : 24;
+        row++;
+
+        // Satır 2: Toplantı Yeri
+        ws.Cell(row, 1).Value = 1;
+        ws.Cell(row, 1).Style.Alignment.SetHorizontal(XLAlignmentHorizontalValues.Center);
+        ws.Cell(row, 2).Value = "Toplantı Yeri";
+        ws.Cell(row, 3).Value = string.IsNullOrWhiteSpace(dto.LocationName) || dto.LocationName == "-" ? "" : dto.LocationName;
+        ws.Range(row, 1, row, 3).Style.Fill.SetBackgroundColor(dataRowBg);
+        ws.Row(row).Height = 20;
+        row++;
+
+        // Satır 3: Gün ve Saat
+        ws.Cell(row, 1).Value = 2;
+        ws.Cell(row, 1).Style.Alignment.SetHorizontal(XLAlignmentHorizontalValues.Center);
+        ws.Cell(row, 2).Value = "Gün ve Saat";
+        var timeStr = dto.MeetingTime.HasValue ? $" - {dto.MeetingTime.Value:HH\\:mm}" : "";
+        ws.Cell(row, 3).Value = $"{dateStr}{timeStr}".Trim(' ', '-');
+        ws.Range(row, 1, row, 3).Style.Fill.SetBackgroundColor(dataRowBg);
+        ws.Row(row).Height = 20;
+
+        int block1End = row;
+        // B ve C sütunları arasındaki dikey ayırıcı çizgi
+        ws.Range(block1Start, 2, block1End, 2).Style.Border.SetRightBorder(thinBorder).Border.SetRightBorderColor(borderColor);
+        // 1. Bloğun alt yatay ayırıcı çizgisi
+        ws.Range(block1End, 1, block1End, 3).Style.Border.SetBottomBorder(sectionBorder).Border.SetBottomBorderColor(borderColor);
+        row++;
+
+        // ═══════════════════════════════════════════════════════════════
+        // 2. KATILIMCILAR
+        // ═══════════════════════════════════════════════════════════════
+        int block2Start = row;
 
         ws.Cell(row, 1).Value = "KATILIMCILAR";
-        ws.Range(row, 1, row, 5).Merge().Style
-            .Font.SetBold().Fill.SetBackgroundColor(XLColor.LightSteelBlue);
+        ws.Range(row, 1, row, 2).Merge();
+        ws.Cell(row, 1).Style.Font.SetBold(true).Font.SetFontSize(10.5).Font.SetFontColor(headerFontColor);
+        ws.Cell(row, 1).Style.Alignment.SetVertical(XLAlignmentVerticalValues.Center);
+
+        ws.Cell(row, 3).Value = "Ad ve Soyad";
+        ws.Cell(row, 3).Style.Font.SetBold(true).Font.SetFontSize(10.5).Font.SetFontColor(headerFontColor);
+        ws.Cell(row, 3).Style.Alignment.SetVertical(XLAlignmentVerticalValues.Center);
+        ws.Range(row, 1, row, 3).Style.Fill.SetBackgroundColor(headerBg);
+        ws.Row(row).Height = 24;
+
+        // KATILIMCILAR başlık altı ince çizgi
+        ws.Range(row, 1, row, 3).Style.Border.SetBottomBorder(thinBorder).Border.SetBottomBorderColor(borderColor);
         row++;
 
-        if (dto.InternalParticipants.Any())
+        if (dto.Participants.Count > 0)
         {
-            foreach (var g in dto.InternalParticipants)
+            int pIndex = 1;
+            foreach (var p in dto.Participants)
             {
-                ws.Cell(row, 1).Value = g.CompanyName ?? "-";
-                ws.Cell(row, 1).Style.Font.SetBold(true);
-                
-                ws.Cell(row, 2).Value = g.ParticipantsText ?? "-";
+                ws.Cell(row, 1).Value = pIndex++;
+                ws.Cell(row, 1).Style.Alignment.SetHorizontal(XLAlignmentHorizontalValues.Center);
+
+                var comp = p.CompanyName;
+                var roleOrTitle = !string.IsNullOrWhiteSpace(p.RoleName) && p.RoleName != "Belirtilmedi"
+                    ? p.RoleName
+                    : (!string.IsNullOrWhiteSpace(p.Title) ? p.Title : "");
+                var leftDesc = string.Join(" ", new[] { comp, roleOrTitle }.Where(s => !string.IsNullOrWhiteSpace(s)));
+                ws.Cell(row, 2).Value = string.IsNullOrWhiteSpace(leftDesc) ? "-" : leftDesc;
                 ws.Cell(row, 2).Style.Alignment.SetWrapText(true);
-                
-                ws.Range(row, 2, row, 5).Merge();
-                ws.Range(row, 1, row, 5).Style.Border.SetOutsideBorder(XLBorderStyleValues.Thin).Border.SetInsideBorder(XLBorderStyleValues.Thin);
+
+                ws.Cell(row, 3).Value = p.FullName;
+                ws.Cell(row, 3).Style.Alignment.SetWrapText(true);
+                ws.Range(row, 1, row, 3).Style.Fill.SetBackgroundColor(dataRowBg);
+                ws.Row(row).Height = 20;
                 row++;
             }
         }
-
-        if (dto.ExternalParticipants.Any())
+        else
         {
-            ws.Cell(row, 1).Value = "Firma";
-            ws.Cell(row, 2).Value = "Ünvan";
-            ws.Cell(row, 3).Value = "Ad Soyad";
-            ws.Range(row, 3, row, 5).Merge();
-            ws.Range(row, 1, row, 5).Style.Font.SetBold().Fill.SetBackgroundColor(XLColor.WhiteSmoke).Border.SetOutsideBorder(XLBorderStyleValues.Thin).Border.SetInsideBorder(XLBorderStyleValues.Thin);
+            ws.Cell(row, 1).Value = 1;
+            ws.Cell(row, 1).Style.Alignment.SetHorizontal(XLAlignmentHorizontalValues.Center);
+            ws.Cell(row, 2).Value = "-";
+            ws.Cell(row, 3).Value = "-";
+            ws.Range(row, 1, row, 3).Style.Fill.SetBackgroundColor(dataRowBg);
+            ws.Row(row).Height = 20;
             row++;
+        }
 
-            foreach (var p in dto.ExternalParticipants)
+        int block2End = row - 1;
+        // B ve C sütunları arasındaki dikey ayırıcı çizgi
+        ws.Range(block2Start, 2, block2End, 2).Style.Border.SetRightBorder(thinBorder).Border.SetRightBorderColor(borderColor);
+        // 2. Bloğun alt yatay ayırıcı çizgisi
+        ws.Range(block2End, 1, block2End, 3).Style.Border.SetBottomBorder(sectionBorder).Border.SetBottomBorderColor(borderColor);
+
+        // ═══════════════════════════════════════════════════════════════
+        // 3. TOPLANTI GÜNDEMİ
+        // ═══════════════════════════════════════════════════════════════
+        ws.Cell(row, 1).Value = "TOPLANTI GÜNDEMİ";
+        ws.Range(row, 1, row, 3).Merge();
+        ws.Cell(row, 1).Style.Font.SetBold(true).Font.SetFontSize(10.5).Font.SetFontColor(headerFontColor);
+        ws.Cell(row, 1).Style.Alignment.SetVertical(XLAlignmentVerticalValues.Center);
+        ws.Range(row, 1, row, 3).Style.Fill.SetBackgroundColor(headerBg);
+        ws.Row(row).Height = 24;
+        row++;
+
+        ws.Cell(row, 1).Value = 1;
+        ws.Cell(row, 1).Style.Alignment.SetHorizontal(XLAlignmentHorizontalValues.Center);
+        var agendaText = !string.IsNullOrWhiteSpace(dto.Description)
+            ? dto.Description
+            : (!string.IsNullOrWhiteSpace(dto.Subject) ? dto.Subject : "-");
+        ws.Cell(row, 2).Value = agendaText;
+        ws.Range(row, 2, row, 3).Merge();
+        ws.Cell(row, 2).Style.Alignment.SetWrapText(true);
+        ws.Range(row, 1, row, 3).Style.Fill.SetBackgroundColor(dataRowBg);
+        int agendaLines = (int)Math.Max(1, Math.Ceiling((double)agendaText.Length / 95.0));
+        ws.Row(row).Height = Math.Max(22, agendaLines * 18);
+
+        int block3End = row;
+        ws.Range(block3End, 1, block3End, 3).Style.Border.SetBottomBorder(sectionBorder).Border.SetBottomBorderColor(borderColor);
+        row++;
+
+        // ═══════════════════════════════════════════════════════════════
+        // 4. NOTLAR (Eski Önemli Notlar - 1. sırada yer alır)
+        // ═══════════════════════════════════════════════════════════════
+        ws.Cell(row, 1).Value = "NOTLAR";
+        ws.Range(row, 1, row, 3).Merge();
+        ws.Cell(row, 1).Style.Font.SetBold(true).Font.SetFontSize(10.5).Font.SetFontColor(headerFontColor);
+        ws.Cell(row, 1).Style.Alignment.SetVertical(XLAlignmentVerticalValues.Center);
+        ws.Range(row, 1, row, 3).Style.Fill.SetBackgroundColor(headerBg);
+        ws.Row(row).Height = 24;
+        row++;
+
+        var regularNotes = dto.Notes.Where(n => n.NoteType != "DECISION").ToList();
+        if (regularNotes.Count > 0)
+        {
+            int nIndex = 1;
+            foreach (var n in regularNotes)
             {
-                ws.Cell(row, 1).Value = p.CompanyName ?? "-";
-                ws.Cell(row, 2).Value = p.Title ?? "-";
-                ws.Cell(row, 3).Value = p.FullName ?? "-";
-                ws.Range(row, 3, row, 5).Merge();
-                ws.Range(row, 1, row, 5).Style.Border.SetOutsideBorder(XLBorderStyleValues.Thin).Border.SetInsideBorder(XLBorderStyleValues.Thin);
+                ws.Cell(row, 1).Value = nIndex++;
+                ws.Cell(row, 1).Style.Alignment.SetHorizontal(XLAlignmentHorizontalValues.Center);
+
+                var noteText = n.Content ?? "";
+                if (n.ResponsiblePerson != null && !string.IsNullOrWhiteSpace(n.ResponsiblePerson.FullName))
+                {
+                    noteText += $" (Sorumlu: {n.ResponsiblePerson.FullName})";
+                }
+                ws.Cell(row, 2).Value = noteText;
+                ws.Range(row, 2, row, 3).Merge();
+                ws.Cell(row, 2).Style.Alignment.SetWrapText(true);
+                ws.Range(row, 1, row, 3).Style.Fill.SetBackgroundColor(dataRowBg);
+                int nLines = (int)Math.Max(1, Math.Ceiling((double)noteText.Length / 95.0));
+                ws.Row(row).Height = Math.Max(20, nLines * 18);
                 row++;
             }
         }
-
-        if (!dto.InternalParticipants.Any() && !dto.ExternalParticipants.Any())
+        else
         {
-            ws.Cell(row, 1).Value = "Katılımcı kaydı bulunmamaktadır.";
-            ws.Range(row, 1, row, 5).Merge().Style.Font.SetItalic().Font.SetFontColor(XLColor.Gray);
+            ws.Cell(row, 1).Value = 1;
+            ws.Cell(row, 1).Style.Alignment.SetHorizontal(XLAlignmentHorizontalValues.Center);
+            ws.Cell(row, 2).Value = "-";
+            ws.Range(row, 2, row, 3).Merge();
+            ws.Range(row, 1, row, 3).Style.Fill.SetBackgroundColor(dataRowBg);
+            ws.Row(row).Height = 20;
             row++;
         }
 
+        int block4End = row - 1;
+        ws.Range(block4End, 1, block4End, 3).Style.Border.SetBottomBorder(sectionBorder).Border.SetBottomBorderColor(borderColor);
+
+        // ═══════════════════════════════════════════════════════════════
+        // 5. ALINAN KARARLAR (2. sırada yer alır)
+        // ═══════════════════════════════════════════════════════════════
+        ws.Cell(row, 1).Value = "ALINAN KARARLAR";
+        ws.Range(row, 1, row, 3).Merge();
+        ws.Cell(row, 1).Style.Font.SetBold(true).Font.SetFontSize(10.5).Font.SetFontColor(headerFontColor);
+        ws.Cell(row, 1).Style.Alignment.SetVertical(XLAlignmentVerticalValues.Center);
+        ws.Range(row, 1, row, 3).Style.Fill.SetBackgroundColor(headerBg);
+        ws.Row(row).Height = 24;
         row++;
 
-        ws.Cell(row, 1).Value = "GÜNDEM VE KARARLAR";
-        ws.Range(row, 1, row, 5).Merge().Style
-            .Font.SetBold().Fill.SetBackgroundColor(XLColor.LightSteelBlue);
-        row++;
-
-        ws.Cell(row, 1).Value = "Sırano";
-        ws.Cell(row, 2).Value = "Tip";
-        ws.Cell(row, 3).Value = "İçerik";
-        ws.Cell(row, 4).Value = "Sorumlu";
-        ws.Cell(row, 5).Value = "Termin";
-        ws.Range(row, 1, row, 5).Style.Font.SetBold().Border.SetOutsideBorder(XLBorderStyleValues.Thin).Border.SetInsideBorder(XLBorderStyleValues.Thin);
-        row++;
-
-        int seq = 1;
-        foreach (var note in dto.Notes)
+        var decisions = dto.Notes.Where(n => n.NoteType == "DECISION").ToList();
+        if (decisions.Count > 0)
         {
-            ws.Cell(row, 1).Value = seq++;
-            ws.Cell(row, 2).Value = note.NoteTypeNavigation?.DisplayName ?? "-";
-            ws.Cell(row, 3).Value = note.Content ?? string.Empty;
-            ws.Cell(row, 4).Value = note.ResponsiblePerson?.FullName ?? "-";
-            ws.Cell(row, 5).Value = note.DueDate?.ToString("dd.MM.yyyy") ?? "-";
-            
-            ws.Cell(row, 3).Style.Alignment.SetWrapText(true);
-            
-            ws.Range(row, 1, row, 5).Style.Border.SetOutsideBorder(XLBorderStyleValues.Thin).Border.SetInsideBorder(XLBorderStyleValues.Thin);
-            ws.Range(row, 1, row, 5).Style.Alignment.SetVertical(XLAlignmentVerticalValues.Top);
-            
+            int dIndex = 1;
+            foreach (var d in decisions)
+            {
+                ws.Cell(row, 1).Value = dIndex++;
+                ws.Cell(row, 1).Style.Alignment.SetHorizontal(XLAlignmentHorizontalValues.Center);
+                ws.Cell(row, 2).Value = d.Content;
+                ws.Range(row, 2, row, 3).Merge();
+                ws.Cell(row, 2).Style.Alignment.SetWrapText(true);
+                ws.Range(row, 1, row, 3).Style.Fill.SetBackgroundColor(dataRowBg);
+                int dLines = (int)Math.Max(1, Math.Ceiling((double)(d.Content?.Length ?? 0) / 95.0));
+                ws.Row(row).Height = Math.Max(20, dLines * 18);
+                row++;
+            }
+        }
+        else
+        {
+            ws.Cell(row, 1).Value = 1;
+            ws.Cell(row, 1).Style.Alignment.SetHorizontal(XLAlignmentHorizontalValues.Center);
+            ws.Cell(row, 2).Value = "-";
+            ws.Range(row, 2, row, 3).Merge();
+            ws.Range(row, 1, row, 3).Style.Fill.SetBackgroundColor(dataRowBg);
+            ws.Row(row).Height = 20;
             row++;
         }
 
-        if (dto.Notes.Count == 0)
+        int block5End = row - 1;
+        ws.Range(block5End, 1, block5End, 3).Style.Border.SetBottomBorder(sectionBorder).Border.SetBottomBorderColor(borderColor);
+
+        // ═══════════════════════════════════════════════════════════════
+        // 6. BİR SONRAKİ TOPLANTI (3. sırada yer alır)
+        // ═══════════════════════════════════════════════════════════════
+        ws.Cell(row, 1).Value = "BİR SONRAKİ TOPLANTI";
+        ws.Range(row, 1, row, 3).Merge();
+        ws.Cell(row, 1).Style.Font.SetBold(true).Font.SetFontSize(10.5).Font.SetFontColor(headerFontColor);
+        ws.Cell(row, 1).Style.Alignment.SetVertical(XLAlignmentVerticalValues.Center);
+        ws.Range(row, 1, row, 3).Style.Fill.SetBackgroundColor(headerBg);
+        ws.Row(row).Height = 24;
+        row++;
+
+        ws.Cell(row, 1).Value = 1;
+        ws.Cell(row, 1).Style.Alignment.SetHorizontal(XLAlignmentHorizontalValues.Center);
+        string nextText = "-";
+        if (dto.NextMeetingAt.HasValue)
         {
-            ws.Cell(row, 1).Value = "Gündem maddesi bulunmamaktadır.";
-            ws.Range(row, 1, row, 5).Merge().Style.Font.SetItalic().Font.SetFontColor(XLColor.Gray);
-            row++;
+            nextText = dto.NextMeetingAt.Value.ToString("dd.MM.yyyy HH:mm");
+            if (!string.IsNullOrWhiteSpace(dto.NextMeetingNote))
+            {
+                nextText += $" - {dto.NextMeetingNote}";
+            }
         }
+        ws.Cell(row, 2).Value = nextText;
+        ws.Range(row, 2, row, 3).Merge();
+        ws.Cell(row, 2).Style.Alignment.SetWrapText(true);
+        ws.Range(row, 1, row, 3).Style.Fill.SetBackgroundColor(dataRowBg);
+        ws.Row(row).Height = 22;
 
-        ws.Column(1).Width = 8;
-        ws.Column(2).Width = 20;
-        ws.Column(3).Width = 50;
-        ws.Column(4).Width = 20;
-        ws.Column(5).Width = 15;
+        int totalRows = row;
 
-        ws.Style.Font.FontName = "Calibri";
-        ws.Style.Font.FontSize = 11;
+        // ═══════════════════════════════════════════════════════════════
+        // Belge Geneli Format ve Kenarlıklar (Border)
+        // ═══════════════════════════════════════════════════════════════
+        var wholeRange = ws.Range(1, 1, totalRows, 3);
+        wholeRange.Style.Font.SetFontName(fontName);
+        wholeRange.Style.Font.SetFontSize(9.5);
+        wholeRange.Style.Font.SetFontColor(XLColor.Black);
+        wholeRange.Style.Alignment.SetVertical(XLAlignmentVerticalValues.Top);
+
+        // Belge dış çerçevesi: Kalın/Medium kenarlık
+        wholeRange.Style.Border.SetOutsideBorder(sectionBorder);
+        wholeRange.Style.Border.SetOutsideBorderColor(borderColor);
+
+        // Yazdırma ve Sayfa Yapısı (A4 Dikey)
+        ws.ShowGridLines = true;
+        ws.PageSetup.PageOrientation = XLPageOrientation.Portrait;
+        ws.PageSetup.PaperSize = XLPaperSize.A4Paper;
+        ws.PageSetup.PagesWide = 1;
+        ws.PageSetup.PagesTall = 0;
+        ws.PageSetup.Margins.SetLeft(0.5);
+        ws.PageSetup.Margins.SetRight(0.5);
+        ws.PageSetup.Margins.SetTop(0.5);
+        ws.PageSetup.Margins.SetBottom(0.5);
 
         using var stream = new MemoryStream();
         workbook.SaveAs(stream);
@@ -866,16 +1052,16 @@ public class MeetingsController : ControllerBase
                 page.Size(PageSizes.A4);
                 page.Margin(1, Unit.Centimetre);
                 page.PageColor(Colors.White);
-                page.DefaultTextStyle(x => x.FontSize(10).FontFamily("Lato"));
+                page.DefaultTextStyle(x => x.FontSize(9.5f).FontFamily("Lato"));
 
-                page.Header().Element(c => ComposeHeader(c, dto));
-                page.Content().Element(c => ComposeContent(c, dto));
+                page.Content().Element(c => ComposeCorporatePdf(c, dto));
+
                 page.Footer().AlignCenter().Text(x =>
                 {
-                    x.Span("Sayfa ");
-                    x.CurrentPageNumber();
-                    x.Span(" / ");
-                    x.TotalPages();
+                    x.Span("Sayfa ").FontSize(8.5f).FontColor(Colors.Grey.Darken1);
+                    x.CurrentPageNumber().FontSize(8.5f).FontColor(Colors.Grey.Darken1);
+                    x.Span(" / ").FontSize(8.5f).FontColor(Colors.Grey.Darken1);
+                    x.TotalPages().FontSize(8.5f).FontColor(Colors.Grey.Darken1);
                 });
             });
         });
@@ -884,177 +1070,319 @@ public class MeetingsController : ControllerBase
         return File(pdfData, "application/pdf", $"Tutanak_{dto.MeetingId}_{DateTime.Now:yyyyMMddHHmm}.pdf");
     }
 
-    // ──────────── PDF yardımcıları ────────────
-
-    /// <summary>QuestPDF Text/Span null kabul etmez → boş/null değerler için güvenli fallback.</summary>
-    private static string Safe(string? value, string fallback = "-") =>
-        string.IsNullOrWhiteSpace(value) ? fallback : value;
-
-    /// <summary>Bu uzunluğun altındaki satırlar sayfalar arasında bölünmez (bütün halinde bir sonraki sayfaya taşınır).</summary>
-    private const int AtomicRowCharLimit = 700;
-
-    private static IContainer HeaderCellStyle(IContainer c) =>
-        c.Background(Colors.Grey.Lighten3).BorderBottom(1).BorderColor(Colors.Grey.Lighten1).PaddingVertical(4).PaddingHorizontal(3);
-
-    private static IContainer BodyCellStyle(IContainer c, string bg) =>
-        c.Background(bg).BorderBottom(0.5f).BorderColor(Colors.Grey.Lighten2).PaddingVertical(3).PaddingHorizontal(3);
-
-    private static void ComposeEmptyNotice(IContainer container, string message) =>
-        container.Border(0.5f).BorderColor(Colors.Grey.Lighten2).Background(Colors.Grey.Lighten5)
-            .Padding(8).AlignCenter().Text(message).Italic().FontColor(Colors.Grey.Darken1);
-
-    private void ComposeHeader(IContainer container, MeetingMinutesExportDto dto)
+    // ──────────── Kurumsal PDF Düzeni (Web Önizleme & Excel ile Birebir) ────────────
+    private static void ComposeCorporatePdf(IContainer container, MeetingMinutesExportDto dto)
     {
-        container.Row(row =>
+        var borderColor = "#4B5563";
+        var headerBg = "#E2E8F0";
+        var dataBg = "#F8FAFC";
+
+        var dateStr = dto.MeetingDate?.ToString("dd.MM.yyyy") ?? "";
+        var timeStr = dto.MeetingTime.HasValue ? $" - {dto.MeetingTime.Value:HH\\:mm}" : "";
+        var titleStr = !string.IsNullOrWhiteSpace(dto.Title) ? dto.Title : dto.Subject;
+        var fullTitle = !string.IsNullOrWhiteSpace(dateStr) ? $"{titleStr} | {dateStr}" : titleStr;
+        var agendaText = !string.IsNullOrWhiteSpace(dto.Description) ? dto.Description : (!string.IsNullOrWhiteSpace(dto.Subject) ? dto.Subject : "-");
+
+        var regularNotes = dto.Notes.Where(n => n.NoteType != "DECISION").ToList();
+        var decisions = dto.Notes.Where(n => n.NoteType == "DECISION").ToList();
+
+        container.Border(1.5f).BorderColor(borderColor).Column(col =>
         {
-            row.RelativeItem().Column(col =>
+            // ── 1. TOPLANTININ KONUSU ──
+            col.Item().BorderBottom(1.5f).BorderColor(borderColor).Row(row =>
             {
-                col.Item().Text("TOPLANTI TUTANAĞI").FontSize(18).SemiBold().FontColor(Colors.Blue.Darken2);
-                col.Item().PaddingTop(5).Text(text =>
+                // Sol Sütun (Başlık, Yer, Gün-Saat)
+                row.RelativeItem(5.5f).BorderRight(0.75f).BorderColor(borderColor).Column(leftCol =>
                 {
-                    text.Span("Konu: ").SemiBold();
-                    text.Span(Safe(dto.Title));
+                    leftCol.Item().Background(headerBg).Padding(6).Text("TOPLANTININ KONUSU").Bold().FontSize(10);
+                    leftCol.Item().Background(dataBg).Padding(5).Row(r =>
+                    {
+                        r.ConstantItem(18).AlignCenter().Text("1").FontSize(9);
+                        r.RelativeItem().Text("Toplantı Yeri").FontSize(9);
+                    });
+                    leftCol.Item().Background(dataBg).Padding(5).Row(r =>
+                    {
+                        r.ConstantItem(18).AlignCenter().Text("2").FontSize(9);
+                        r.RelativeItem().Text("Gün ve Saat").FontSize(9);
+                    });
                 });
-                col.Item().Text(text =>
+
+                // Sağ Sütun (Değerler)
+                row.RelativeItem(4.5f).Column(rightCol =>
                 {
-                    text.Span("Tarih / Saat: ").SemiBold();
-                    var datePart = dto.MeetingDate?.ToString("dd.MM.yyyy") ?? "-";
-                    var timePart = dto.MeetingTime.HasValue ? $" / {dto.MeetingTime.Value:HH\\:mm}" : "";
-                    text.Span(datePart + timePart);
+                    rightCol.Item().Background(headerBg).Padding(6).Text(fullTitle).Bold().FontSize(10);
+                    rightCol.Item().Background(dataBg).Padding(5).Text(string.IsNullOrWhiteSpace(dto.LocationName) || dto.LocationName == "-" ? "-" : dto.LocationName).FontSize(9);
+                    rightCol.Item().Background(dataBg).Padding(5).Text($"{dateStr}{timeStr}".Trim(' ', '-')).FontSize(9);
                 });
-                col.Item().Text(text =>
+            });
+
+            // ── 2. KATILIMCILAR ──
+            col.Item().BorderBottom(1.5f).BorderColor(borderColor).Column(partCol =>
+            {
+                // Başlık Satırı
+                partCol.Item().BorderBottom(0.75f).BorderColor(borderColor).Row(headerRow =>
                 {
-                    text.Span("Yer: ").SemiBold();
-                    text.Span(Safe(dto.LocationName));
+                    headerRow.RelativeItem(5.5f).BorderRight(0.75f).BorderColor(borderColor).Background(headerBg).Padding(6).Text("KATILIMCILAR").Bold().FontSize(10);
+                    headerRow.RelativeItem(4.5f).Background(headerBg).Padding(6).Text("Ad ve Soyad").Bold().FontSize(10);
+                });
+
+                if (dto.Participants.Count > 0)
+                {
+                    int pIndex = 1;
+                    foreach (var p in dto.Participants)
+                    {
+                        var comp = p.CompanyName;
+                        var roleOrTitle = !string.IsNullOrWhiteSpace(p.RoleName) && p.RoleName != "Belirtilmedi"
+                            ? p.RoleName
+                            : (!string.IsNullOrWhiteSpace(p.Title) ? p.Title : "");
+                        var leftDesc = string.Join(" ", new[] { comp, roleOrTitle }.Where(s => !string.IsNullOrWhiteSpace(s)));
+
+                        int curIdx = pIndex++;
+                        partCol.Item().Background(dataBg).Row(pRow =>
+                        {
+                            pRow.RelativeItem(5.5f).BorderRight(0.75f).BorderColor(borderColor).Padding(4).Row(r =>
+                            {
+                                r.ConstantItem(18).AlignCenter().Text(curIdx.ToString()).FontSize(9);
+                                r.RelativeItem().Text(string.IsNullOrWhiteSpace(leftDesc) ? "-" : leftDesc).FontSize(9);
+                            });
+                            pRow.RelativeItem(4.5f).Padding(4).Text(p.FullName).FontSize(9);
+                        });
+                    }
+                }
+                else
+                {
+                    partCol.Item().Background(dataBg).Row(pRow =>
+                    {
+                        pRow.RelativeItem(5.5f).BorderRight(0.75f).BorderColor(borderColor).Padding(4).Row(r =>
+                        {
+                            r.ConstantItem(18).AlignCenter().Text("1").FontSize(9);
+                            r.RelativeItem().Text("-").FontSize(9);
+                        });
+                        pRow.RelativeItem(4.5f).Padding(4).Text("-").FontSize(9);
+                    });
+                }
+            });
+
+            // ── 3. TOPLANTI GÜNDEMİ ──
+            col.Item().BorderBottom(1.5f).BorderColor(borderColor).Column(agCol =>
+            {
+                agCol.Item().Background(headerBg).Padding(6).Text("TOPLANTI GÜNDEMİ").Bold().FontSize(10);
+                agCol.Item().Background(dataBg).Padding(5).Row(r =>
+                {
+                    r.ConstantItem(18).AlignCenter().Text("1").FontSize(9);
+                    r.RelativeItem().Text(agendaText).FontSize(9);
+                });
+            });
+
+            // ── 4. NOTLAR (Eski Önemli Notlar - 1. sırada yer alır) ──
+            col.Item().BorderBottom(1.5f).BorderColor(borderColor).Column(notesCol =>
+            {
+                notesCol.Item().Background(headerBg).Padding(6).Text("NOTLAR").Bold().FontSize(10);
+                if (regularNotes.Count > 0)
+                {
+                    int nIdx = 1;
+                    foreach (var n in regularNotes)
+                    {
+                        var noteText = n.Content ?? "";
+                        if (n.ResponsiblePerson != null && !string.IsNullOrWhiteSpace(n.ResponsiblePerson.FullName))
+                        {
+                            noteText += $" (Sorumlu: {n.ResponsiblePerson.FullName})";
+                        }
+                        int cur = nIdx++;
+                        notesCol.Item().Background(dataBg).Padding(4).Row(r =>
+                        {
+                            r.ConstantItem(18).AlignCenter().Text(cur.ToString()).FontSize(9);
+                            r.RelativeItem().Text(noteText).FontSize(9);
+                        });
+                    }
+                }
+                else
+                {
+                    notesCol.Item().Background(dataBg).Padding(4).Row(r =>
+                    {
+                        r.ConstantItem(18).AlignCenter().Text("1").FontSize(9);
+                        r.RelativeItem().Text("-").FontSize(9);
+                    });
+                }
+            });
+
+            // ── 5. ALINAN KARARLAR (2. sırada yer alır) ──
+            col.Item().BorderBottom(1.5f).BorderColor(borderColor).Column(decCol =>
+            {
+                decCol.Item().Background(headerBg).Padding(6).Text("ALINAN KARARLAR").Bold().FontSize(10);
+                if (decisions.Count > 0)
+                {
+                    int dIdx = 1;
+                    foreach (var d in decisions)
+                    {
+                        int cur = dIdx++;
+                        decCol.Item().Background(dataBg).Padding(4).Row(r =>
+                        {
+                            r.ConstantItem(18).AlignCenter().Text(cur.ToString()).FontSize(9);
+                            r.RelativeItem().Text(d.Content ?? "-").FontSize(9);
+                        });
+                    }
+                }
+                else
+                {
+                    decCol.Item().Background(dataBg).Padding(4).Row(r =>
+                    {
+                        r.ConstantItem(18).AlignCenter().Text("1").FontSize(9);
+                        r.RelativeItem().Text("-").FontSize(9);
+                    });
+                }
+            });
+
+            // ── 6. BİR SONRAKİ TOPLANTI (3. sırada yer alır) ──
+            col.Item().Column(nextCol =>
+            {
+                nextCol.Item().Background(headerBg).Padding(6).Text("BİR SONRAKİ TOPLANTI").Bold().FontSize(10);
+                string nextText = "-";
+                if (dto.NextMeetingAt.HasValue)
+                {
+                    nextText = dto.NextMeetingAt.Value.ToString("dd.MM.yyyy HH:mm");
+                    if (!string.IsNullOrWhiteSpace(dto.NextMeetingNote))
+                    {
+                        nextText += $" - {dto.NextMeetingNote}";
+                    }
+                }
+                nextCol.Item().Background(dataBg).Padding(5).Row(r =>
+                {
+                    r.ConstantItem(18).AlignCenter().Text("1").FontSize(9);
+                    r.RelativeItem().Text(nextText).FontSize(9);
                 });
             });
         });
     }
 
-    private void ComposeContent(IContainer container, MeetingMinutesExportDto dto)
+    // ──────────── Meeting Attachments Endpoints (Kartvizit & Toplantı Görselleri) ────────────
+    [HttpGet("{id}/attachments")]
+    public async Task<ActionResult<List<AttachmentResponseDto>>> GetAttachments(int id, [FromQuery] string? category = null)
     {
-        var internals = dto.InternalParticipants ?? new List<InternalParticipantGroupDto>();
-        var externals = dto.ExternalParticipants ?? new List<ExternalParticipantDto>();
-        var notes = dto.Notes ?? new List<Note>();
+        var meetingExists = await _db.Meetings.AnyAsync(m => m.Id == id && !m.IsDeleted);
+        if (!meetingExists) return NotFound("Toplantı bulunamadı.");
 
-        container.PaddingVertical(1, Unit.Centimetre).Column(col =>
+        var query = _db.Attachments
+            .Include(a => a.UploadedByUser)
+            .Where(a => a.EntityType == "MEETING" && a.EntityId == id && !a.IsDeleted);
+
+        if (!string.IsNullOrWhiteSpace(category))
         {
-            col.Spacing(15);
-            
-            // ── Participants ──
-            // EnsureSpace: başlık sayfanın en altında "yetim" kalmasın, en az birkaç satır sığacak alan olsun
-            col.Item().EnsureSpace(60).Text("KATILIMCILAR").FontSize(12).SemiBold().FontColor(Colors.Grey.Darken3);
+            query = query.Where(a => a.Category == category);
+        }
 
-            if (!internals.Any() && !externals.Any())
+        var list = await query
+            .OrderByDescending(a => a.CreatedAt)
+            .Select(a => new AttachmentResponseDto
             {
-                col.Item().Element(c => ComposeEmptyNotice(c, "Katılımcı kaydı bulunmamaktadır."));
-            }
-            
-            if (internals.Any())
-            {
-                col.Item().Table(table =>
-                {
-                    table.ColumnsDefinition(columns =>
-                    {
-                        columns.RelativeColumn(3);
-                        columns.RelativeColumn(7);
-                    });
+                Id = a.Id,
+                MeetingId = a.EntityId,
+                Category = a.Category ?? "MEETING_PHOTO",
+                FileName = a.FileName,
+                MimeType = a.MimeType,
+                FileSizeBytes = a.FileSizeBytes,
+                Description = a.Description,
+                UploadedByName = a.UploadedByUser != null ? a.UploadedByUser.FullName : "Sistem",
+                CreatedAt = a.CreatedAt,
+                Url = $"/api/meetings/{id}/attachments/{a.Id}/file"
+            })
+            .ToListAsync();
 
-                    foreach (var ip in internals)
-                    {
-                        // Kısa satırlar bölünmez
-                        table.Cell().ShowEntire().Element(c => BodyCellStyle(c, Colors.White)).Text(Safe(ip.CompanyName)).SemiBold();
-                        table.Cell().ShowEntire().Element(c => BodyCellStyle(c, Colors.White)).Text(Safe(ip.ParticipantsText));
-                    }
-                });
-            }
+        return Ok(list);
+    }
 
-            if (externals.Any())
-            {
-                col.Item().Table(table =>
-                {
-                    table.ColumnsDefinition(columns =>
-                    {
-                        columns.RelativeColumn(3);
-                        columns.RelativeColumn(3);
-                        columns.RelativeColumn(4);
-                    });
+    [HttpPost("{id}/attachments")]
+    public async Task<ActionResult<AttachmentResponseDto>> UploadAttachment(
+        int id,
+        [FromForm] IFormFile? file,
+        [FromForm] string? category = "MEETING_PHOTO",
+        [FromForm] string? description = null)
+    {
+        if (file == null || file.Length == 0)
+            return BadRequest("Lütfen geçerli bir dosya seçin.");
 
-                    // Header her yeni sayfada otomatik tekrarlanır
-                    table.Header(header =>
-                    {
-                        header.Cell().Element(HeaderCellStyle).Text("Firma").SemiBold();
-                        header.Cell().Element(HeaderCellStyle).Text("Ünvan").SemiBold();
-                        header.Cell().Element(HeaderCellStyle).Text("Ad Soyad").SemiBold();
-                    });
+        var meetingExists = await _db.Meetings.AnyAsync(m => m.Id == id && !m.IsDeleted);
+        if (!meetingExists) return NotFound("Toplantı bulunamadı.");
 
-                    int index = 0;
-                    foreach (var ep in externals)
-                    {
-                        var bgColor = index % 2 == 0 ? Colors.White : Colors.Grey.Lighten4;
-                        table.Cell().ShowEntire().Element(c => BodyCellStyle(c, bgColor)).Text(Safe(ep.CompanyName));
-                        table.Cell().ShowEntire().Element(c => BodyCellStyle(c, bgColor)).Text(Safe(ep.Title));
-                        table.Cell().ShowEntire().Element(c => BodyCellStyle(c, bgColor)).Text(Safe(ep.FullName));
-                        index++;
-                    }
-                });
-            }
+        var validCategory = category?.ToUpperInvariant() == "BUSINESS_CARD" ? "BUSINESS_CARD" : "MEETING_PHOTO";
 
-            // ── Meeting Items ──
-            col.Item().PaddingTop(10).EnsureSpace(80).Text("GÜNDEM VE KARARLAR").FontSize(12).SemiBold().FontColor(Colors.Grey.Darken3);
+        var uploadsFolder = Path.Combine(AppContext.BaseDirectory, "uploads", "meetings", id.ToString());
+        if (!Directory.Exists(uploadsFolder))
+        {
+            Directory.CreateDirectory(uploadsFolder);
+        }
 
-            if (notes.Count == 0)
-            {
-                col.Item().Element(c => ComposeEmptyNotice(c, "Gündem maddesi bulunmamaktadır."));
-                return;
-            }
-            
-            col.Item().Table(table =>
-            {
-                table.ColumnsDefinition(columns =>
-                {
-                    columns.ConstantColumn(22);
-                    columns.ConstantColumn(55);
-                    columns.RelativeColumn();
-                    columns.ConstantColumn(75);
-                    columns.ConstantColumn(60);
-                });
+        var ext = Path.GetExtension(file.FileName);
+        var uniqueFileName = $"{Guid.NewGuid():N}{ext}";
+        var filePath = Path.Combine(uploadsFolder, uniqueFileName);
 
-                table.Header(header =>
-                {
-                    header.Cell().Element(HeaderCellStyle).Text("#").SemiBold();
-                    header.Cell().Element(HeaderCellStyle).Text("Tip").SemiBold();
-                    header.Cell().Element(HeaderCellStyle).Text("İçerik").SemiBold();
-                    header.Cell().Element(HeaderCellStyle).Text("Sorumlu").SemiBold();
-                    header.Cell().Element(HeaderCellStyle).Text("Termin").SemiBold();
-                });
+        using (var stream = new FileStream(filePath, FileMode.Create))
+        {
+            await file.CopyToAsync(stream);
+        }
 
-                int index = 0;
-                int seq = 1;
-                foreach (var note in notes)
-                {
-                    var bgColor = index % 2 == 0 ? Colors.White : Colors.Grey.Lighten4;
-                    var content = note.Content ?? string.Empty;
+        var attachment = new Attachment
+        {
+            EntityType = "MEETING",
+            EntityId = id,
+            Category = validCategory,
+            FileName = file.FileName,
+            FileExtension = ext,
+            FileSizeBytes = file.Length,
+            MimeType = string.IsNullOrWhiteSpace(file.ContentType) ? "application/octet-stream" : file.ContentType,
+            StoragePath = filePath,
+            Description = description,
+            UploadedBy = CurrentUserId,
+            CreatedAt = DateTime.UtcNow,
+            UpdatedAt = DateTime.UtcNow,
+            IsDeleted = false
+        };
 
-                    // Page-break kuralı:
-                    //  • Normal uzunluktaki satırlar ShowEntire ile bütün halinde tutulur → hücre ortadan bölünmez,
-                    //    satır sığmıyorsa tamamı sonraki sayfaya geçer (tablo başlığı tekrar eder).
-                    //  • Tek sayfaya sığmayacak kadar uzun içerikte ShowEntire layout hatası verir; bu durumda
-                    //    yalnızca EnsureSpace uygulanır (en az birkaç satır sığmıyorsa yeni sayfadan başlar).
-                    var isAtomic = content.Length <= AtomicRowCharLimit;
-                    IContainer Cell() => isAtomic
-                        ? table.Cell().ShowEntire().Element(c => BodyCellStyle(c, bgColor))
-                        : table.Cell().EnsureSpace(60).Element(c => BodyCellStyle(c, bgColor));
+        _db.Attachments.Add(attachment);
+        await _db.SaveChangesAsync();
 
-                    Cell().Text(seq.ToString());
-                    Cell().Text(Safe(note.NoteTypeNavigation?.DisplayName));
-                    Cell().Text(Safe(content, ""));
-                    Cell().Text(Safe(note.ResponsiblePerson?.FullName));
-                    Cell().Text(note.DueDate?.ToString("dd.MM.yyyy") ?? "-");
-                    index++;
-                    seq++;
-                }
-            });
-        });
+        var user = await _db.Users.FindAsync(CurrentUserId);
+
+        var dto = new AttachmentResponseDto
+        {
+            Id = attachment.Id,
+            MeetingId = id,
+            Category = attachment.Category,
+            FileName = attachment.FileName,
+            MimeType = attachment.MimeType,
+            FileSizeBytes = attachment.FileSizeBytes,
+            Description = attachment.Description,
+            UploadedByName = user?.FullName ?? "Sistem",
+            CreatedAt = attachment.CreatedAt,
+            Url = $"/api/meetings/{id}/attachments/{attachment.Id}/file"
+        };
+
+        return Ok(dto);
+    }
+
+    [HttpDelete("{id}/attachments/{attachmentId}")]
+    public async Task<IActionResult> DeleteAttachment(int id, int attachmentId)
+    {
+        var attachment = await _db.Attachments.FirstOrDefaultAsync(a => a.Id == attachmentId && a.EntityType == "MEETING" && a.EntityId == id && !a.IsDeleted);
+        if (attachment == null) return NotFound("Ek dosya bulunamadı.");
+
+        attachment.IsDeleted = true;
+        attachment.DeletedAt = DateTime.UtcNow;
+        attachment.DeletedBy = CurrentUserId;
+
+        await _db.SaveChangesAsync();
+        return NoContent();
+    }
+
+    [HttpGet("{id}/attachments/{attachmentId}/file")]
+    public async Task<IActionResult> GetAttachmentFile(int id, int attachmentId)
+    {
+        var attachment = await _db.Attachments.FirstOrDefaultAsync(a => a.Id == attachmentId && a.EntityType == "MEETING" && a.EntityId == id && !a.IsDeleted);
+        if (attachment == null) return NotFound("Ek dosya bulunamadı.");
+
+        if (!System.IO.File.Exists(attachment.StoragePath))
+            return NotFound("Dosya sunucu diskinde bulunamadı.");
+
+        return PhysicalFile(attachment.StoragePath, attachment.MimeType, attachment.FileName);
     }
 }

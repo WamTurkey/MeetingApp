@@ -8,7 +8,7 @@ namespace MeetingApp.API.Controllers;
 
 [ApiController]
 [Route("api/[controller]")]
-public class PersonsController : ControllerBase
+public class PersonsController : BaseApiController
 {
     private readonly MeetingDbContext _db;
     public PersonsController(MeetingDbContext db) => _db = db;
@@ -43,7 +43,8 @@ public class PersonsController : ControllerBase
         var person = new Person
         {
             FullName = dto.FullName, CompanyId = dto.CompanyId, Title = dto.Title,
-            Email = dto.Email, Phone = dto.Phone, LinkedUserId = dto.LinkedUserId, CreatedBy = 1
+            Email = dto.Email, Phone = dto.Phone, LinkedUserId = dto.LinkedUserId,
+            IsActive = dto.IsActive, CreatedBy = CurrentUserId
         };
         _db.Persons.Add(person);
         await _db.SaveChangesAsync();
@@ -62,7 +63,7 @@ public class PersonsController : ControllerBase
         p.FullName = dto.FullName; p.CompanyId = dto.CompanyId; p.Title = dto.Title;
         p.Email = dto.Email; p.Phone = dto.Phone; p.IsActive = dto.IsActive;
         p.LinkedUserId = dto.LinkedUserId;
-        p.UpdatedBy = 1; p.UpdatedAt = DateTime.UtcNow;
+        p.UpdatedBy = CurrentUserId; p.UpdatedAt = DateTime.UtcNow;
         await _db.SaveChangesAsync();
         return Ok(new PersonDto(p.Id, p.FullName, p.CompanyId, null,
             p.Title, p.Email, p.Phone, p.IsActive, p.LinkedUserId));
@@ -87,7 +88,7 @@ public class PersonsController : ControllerBase
     {
         var p = await _db.Persons.FindAsync(id);
         if (p == null) return NotFound();
-        p.IsDeleted = true; p.DeletedAt = DateTime.UtcNow; p.DeletedBy = 1;
+        p.IsDeleted = true; p.DeletedAt = DateTime.UtcNow; p.DeletedBy = CurrentUserId;
         await _db.SaveChangesAsync();
         return NoContent();
     }

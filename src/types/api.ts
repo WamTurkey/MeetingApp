@@ -393,3 +393,19 @@ export interface FollowupChangeLogDto {
   changedByName: string;
   changedAt: string;
 }
+
+// ──────────── Meeting Attachments (Kartvizit / Toplantı Görselleri) ────────────
+
+export type AttachmentCategory = "BUSINESS_CARD" | "MEETING_PHOTO" | "VOICE_NOTE";
+
+export interface AttachmentDto {
+  id: number;
+  meetingId: number;
+  category: AttachmentCategory;
+  fileName: string;
+  mimeType: string;
+  fileSizeBytes: number;
+  description: string | null;
+  uploadedByName: string;
+  createdAt: string;
+}

@@ -9,7 +9,7 @@ namespace MeetingApp.API.Controllers;
 
 [ApiController]
 [Route("api/[controller]")]
-public class FollowupsController : ControllerBase
+public class FollowupsController : BaseApiController
 {
     private readonly MeetingDbContext _db;
     public FollowupsController(MeetingDbContext db) => _db = db;
@@ -94,7 +94,7 @@ public class FollowupsController : ControllerBase
             WaitingReason = dto.WaitingReason, DevelopmentNote = dto.DevelopmentNote,
             SourceMeetingId = dto.SourceMeetingId, SourceNoteId = dto.SourceNoteId,
             ActionStatus = NoteFollowupSync.NormalizeStatus(dto.ActionStatus),
-            CreatedBy = 1
+            CreatedBy = CurrentUserId
         };
         _db.FollowupItems.Add(item);
         await _db.SaveChangesAsync(); // Id atanması için önce kaydet
@@ -116,7 +116,7 @@ public class FollowupsController : ControllerBase
         _db.FollowupChangeLogs.Add(new FollowupChangeLog
         {
             FollowupId = item.Id, Action = "CREATE",
-            Description = "Takip maddesi oluşturuldu", ChangedBy = 1
+            Description = "Takip maddesi oluşturuldu", ChangedBy = CurrentUserId
         });
         await _db.SaveChangesAsync();
         return CreatedAtAction(nameof(GetById), new { id = item.Id }, await GetByIdInternal(item.Id));
@@ -136,7 +136,7 @@ public class FollowupsController : ControllerBase
                 {
                     FollowupId = id, Action = "UPDATE", FieldName = field,
                     OldValue = oldVal, NewValue = newVal,
-                    Description = description ?? $"{field} güncellendi", ChangedBy = 1
+                    Description = description ?? $"{field} güncellendi", ChangedBy = CurrentUserId
                 });
         }
 
@@ -215,7 +215,7 @@ public class FollowupsController : ControllerBase
             }
         }
 
-        f.UpdatedBy = 1; f.UpdatedAt = DateTime.UtcNow; f.Version++;
+        f.UpdatedBy = CurrentUserId; f.UpdatedAt = DateTime.UtcNow; f.Version++;
 
         // Takip → Not senkronu: termin / durum / sorumlu kaynak notla aynı kalsın
         await NoteFollowupSync.SyncToNoteAsync(_db, f);
@@ -229,7 +229,7 @@ public class FollowupsController : ControllerBase
     {
         var f = await _db.FollowupItems.FindAsync(id);
         if (f == null) return NotFound();
-        f.IsDeleted = true; f.DeletedAt = DateTime.UtcNow; f.DeletedBy = 1;
+        f.IsDeleted = true; f.DeletedAt = DateTime.UtcNow; f.DeletedBy = CurrentUserId;
         // Kaynak notun durumu da iptal olarak işaretlenir (iki tablo arasında çelişki kalmasın)
         if (f.SourceNoteId.HasValue)
         {

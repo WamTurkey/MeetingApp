@@ -8,7 +8,7 @@ namespace MeetingApp.API.Controllers;
 
 [ApiController]
 [Route("api/[controller]")]
-public class ProjectsController : ControllerBase
+public class ProjectsController : BaseApiController
 {
     private readonly MeetingDbContext _db;
     public ProjectsController(MeetingDbContext db) => _db = db;
@@ -29,7 +29,7 @@ public class ProjectsController : ControllerBase
     [HttpPost]
     public async Task<ActionResult<ProjectDto>> Create([FromBody] CreateProjectDto dto)
     {
-        var e = new Project { Name = dto.Name, Code = dto.Code, CreatedBy = 1 };
+        var e = new Project { Name = dto.Name, Code = dto.Code, IsActive = dto.IsActive, CreatedBy = CurrentUserId };
         _db.Projects.Add(e); await _db.SaveChangesAsync();
         return CreatedAtAction(nameof(GetById), new { id = e.Id }, new ProjectDto(e.Id, e.Name, e.Code, e.IsActive));
     }
@@ -40,7 +40,7 @@ public class ProjectsController : ControllerBase
         var x = await _db.Projects.FindAsync(id);
         if (x == null) return NotFound();
         x.Name = dto.Name; x.Code = dto.Code; x.IsActive = dto.IsActive;
-        x.UpdatedBy = 1; x.UpdatedAt = DateTime.UtcNow;
+        x.UpdatedBy = CurrentUserId; x.UpdatedAt = DateTime.UtcNow;
         await _db.SaveChangesAsync();
         return Ok(new ProjectDto(x.Id, x.Name, x.Code, x.IsActive));
     }
@@ -50,7 +50,7 @@ public class ProjectsController : ControllerBase
     {
         var x = await _db.Projects.FindAsync(id);
         if (x == null) return NotFound();
-        x.IsDeleted = true; x.DeletedAt = DateTime.UtcNow; x.DeletedBy = 1;
+        x.IsDeleted = true; x.DeletedAt = DateTime.UtcNow; x.DeletedBy = CurrentUserId;
         await _db.SaveChangesAsync(); return NoContent();
     }
 }

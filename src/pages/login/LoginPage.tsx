@@ -17,10 +17,14 @@ export function LoginPage() {
 
   function validate(): boolean {
     const next: typeof errors = {};
-    if (!email.trim()) next.email = "E-posta adresi gereklidir.";
-    else if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) next.email = "Geçerli bir e-posta adresi giriniz.";
-    if (!password) next.password = "Şifre gereklidir.";
-    else if (password.length < 6) next.password = "Şifre en az 6 karakter olmalıdır.";
+    if (!email.trim()) {
+      next.email = "E-posta veya kullanıcı adı gereklidir.";
+    } else if (email.includes("@") && !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) {
+      next.email = "Geçerli bir e-posta adresi giriniz.";
+    }
+    if (!password) {
+      next.password = "Şifre gereklidir.";
+    }
     setErrors(next);
     return Object.keys(next).length === 0;
   }
@@ -29,7 +33,18 @@ export function LoginPage() {
     e.preventDefault();
     if (!validate()) return;
     try {
-      await login({ email: email.trim().toLowerCase(), password });
+      await login({ email: email.trim(), password: password.trim() });
+      navigate(returnTo, { replace: true });
+    } catch {
+      // error handled by AuthProvider
+    }
+  }
+
+  async function handleQuickLogin(userEmail: string, userPass: string) {
+    setEmail(userEmail);
+    setPassword(userPass);
+    try {
+      await login({ email: userEmail, password: userPass });
       navigate(returnTo, { replace: true });
     } catch {
       // error handled by AuthProvider
@@ -113,20 +128,20 @@ export function LoginPage() {
 
             {/* ── Login Form ─────────────────────── */}
             <form onSubmit={handleSubmit} className="flex flex-col gap-5" noValidate>
-              {/* Email */}
+              {/* Email or Username */}
               <div>
                 <label className="mb-1.5 block text-xs font-semibold uppercase tracking-wider text-slate-400">
-                  E-posta
+                  E-posta veya Kullanıcı Adı
                 </label>
                 <div className="relative">
                   <Mail className="pointer-events-none absolute left-3.5 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-500" />
                   <input
-                    type="email"
-                    placeholder="admin@wam.com.tr"
+                    type="text"
+                    placeholder="boravarol veya bora.varol@wamturkey.com"
                     value={email}
                     onChange={(e) => setEmail(e.target.value)}
                     disabled={isLoading}
-                    autoComplete="email"
+                    autoComplete="username"
                     className="w-full rounded-xl border border-white/10 bg-slate-950/50 py-3 pl-11 pr-4 text-sm text-white placeholder-slate-500 outline-none transition-all duration-200 focus:border-blue-500/60 focus:bg-slate-950/70 focus:ring-2 focus:ring-blue-500/20 disabled:opacity-50"
                   />
                 </div>
@@ -177,16 +192,25 @@ export function LoginPage() {
               </button>
             </form>
 
-            {/* ── Demo Credentials ───────────────── */}
-            <div className="mt-6 rounded-xl border border-white/5 bg-white/[0.03] px-4 py-3">
-              <p className="text-center text-xs text-slate-500">
-                Demo giriş bilgileri
+            {/* ── Quick Login / Credentials ───────────────── */}
+            <div className="mt-6 rounded-2xl border border-blue-500/20 bg-blue-500/[0.06] p-3.5 text-center backdrop-blur-sm">
+              <p className="text-xs text-slate-300 font-medium">
+                Bora Varol Hesabı
               </p>
-              <div className="mt-1.5 flex items-center justify-center gap-3 text-xs">
-                <code className="rounded-md bg-white/5 px-2 py-1 font-mono text-blue-300">admin@wam.com.tr</code>
-                <span className="text-slate-600">/</span>
-                <code className="rounded-md bg-white/5 px-2 py-1 font-mono text-blue-300">Admin123!</code>
+              <div className="mt-2.5 flex items-center justify-center gap-2">
+                <button
+                  type="button"
+                  onClick={() => handleQuickLogin('bora.varol@wamturkey.com', 'admin123')}
+                  disabled={isLoading}
+                  className="flex items-center gap-2 rounded-xl bg-gradient-to-r from-blue-600 to-indigo-600 px-4 py-2 text-xs font-semibold text-white shadow-md shadow-blue-500/20 transition hover:from-blue-500 hover:to-indigo-500 active:scale-95"
+                >
+                  <LogIn className="h-3.5 w-3.5" />
+                  <span>Tek Tıkla Giriş Yap</span>
+                </button>
               </div>
+              <p className="mt-2 text-2xs text-slate-400">
+                veya kullanıcı adına <code className="text-blue-300">boravarol</code> / şifreye <code className="text-blue-300">admin123</code> yazabilirsiniz.
+              </p>
             </div>
 
             {/* Footer */}

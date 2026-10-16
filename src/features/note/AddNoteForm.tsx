@@ -17,6 +17,7 @@ import type { NoteType, ActionStatus } from "@/shared/config/constants";
 import { usePersons } from "@/entities/catalog/api/queries";
 import type { PersonDto } from "@/types/api";
 import { cn } from "@/shared/lib/cn";
+import { SpeechToTextButton } from "@/features/voice-note";
 
 
 // RESPONSIBLE_OPTIONS is now computed inside the component using personOptions hook
@@ -26,6 +27,7 @@ export interface AddNoteFormProps {
   onSubmit: (data: NoteCreatePayload) => void | Promise<void>;
   onCancel?: () => void;
   isLoading?: boolean;
+  initialContent?: string;
 }
 
 /**
@@ -45,13 +47,20 @@ export function AddNoteForm({
   onSubmit,
   onCancel,
   isLoading = false,
+  initialContent = "",
 }: AddNoteFormProps) {
   const personOptions = usePersonOptions();
   const RESPONSIBLE_OPTIONS = [
     { value: "", label: "Seçilmedi" },
     ...personOptions.map(p => ({ value: String(p.value), label: p.label })),
   ];
-  const [content, setContent] = useState("");
+  const [content, setContent] = useState(initialContent);
+
+  React.useEffect(() => {
+    if (initialContent) {
+      setContent(initialContent);
+    }
+  }, [initialContent]);
   const [type, setType] = useState<NoteType>("NOTE");
   const [hasDeadline, setHasDeadline] = useState(false);
   const [deadline, setDeadline] = useState("");
@@ -100,7 +109,7 @@ export function AddNoteForm({
       <div className="w-24 shrink-0 text-xs text-surface-400 font-medium pt-1.5 truncate">
         Yeni Not...
       </div>
-      <div className="flex-1 min-w-[200px]">
+      <div className="flex-1 min-w-[200px] relative">
         <textarea
           ref={textareaRef}
           value={content}
@@ -117,13 +126,24 @@ export function AddNoteForm({
             }
           }}
           className={cn(
-            "w-full bg-white dark:bg-surface-900 border rounded focus:ring-1 p-1 text-sm resize-none focus:outline-none min-h-[32px] overflow-hidden leading-relaxed",
+            "w-full bg-white dark:bg-surface-900 border rounded focus:ring-1 p-1 pr-24 text-sm resize-none focus:outline-none min-h-[32px] overflow-hidden leading-relaxed",
             error ? "border-danger-500 focus:ring-danger-500" : "border-surface-200 focus:border-brand-500 focus:ring-brand-500"
           )}
           rows={1}
-          placeholder="Karar / görev metni... (Kaydetmek için Enter'a basın)"
+          placeholder="Not metni yazın veya mikrofonla sesle dikte edin..."
           autoFocus
         />
+        <div className="absolute right-1.5 top-0.5">
+          <SpeechToTextButton
+            size="sm"
+            showLabel
+            label="Sesle Dikte"
+            onTranscript={(text) => {
+              setContent((prev) => (prev ? prev + " " + text : text));
+              if (error) setError("");
+            }}
+          />
+        </div>
         {error && <div className="text-danger-500 text-xs mt-1">{error}</div>}
       </div>
       <div className="w-24 shrink-0 text-center text-xs text-surface-400 font-mono pt-1.5">
