@@ -4,9 +4,13 @@ namespace MeetingApp.API.DTOs;
 public record MeetingListDto(
     int Id, string Title, string MeetingDate, string? PlannedStart,
     string Status, string StatusDisplay,
-    string? ProjectName, string? CompanyName, string? LocationName, string? CategoryName,
+    int? ProjectId, string? ProjectName,
+    string? CompanyName,
+    int? LocationId, string? LocationName,
+    int? CategoryId, string? CategoryName,
     int ParticipantCount, int NoteCount,
-    string CreatedAt);
+    string CreatedAt,
+    int LinkCount = 0);
 
 // ──────────── Meeting Detail ────────────
 public record MeetingDetailDto(
@@ -78,6 +82,8 @@ public record FollowupItemDto(
     string? CompletedOn, string? WaitingReason, string? DevelopmentNote,
     List<int>? DependencyItemIds, int? SourceMeetingId, string? SourceMeetingTitle,
     int? SourceNoteId, int Version,
+    int? ListId, string? ListName, bool IsFlagged, bool IsUrgent,
+    int? LinkedFollowupId,
     string CreatedAt, string UpdatedAt);
 
 public record CreateFollowupItemDto(
@@ -86,14 +92,22 @@ public record CreateFollowupItemDto(
     string? DueDate = null, string? ActionStatus = null,
     string? WaitingReason = null,
     string? DevelopmentNote = null, List<int>? DependencyItemIds = null,
-    int? SourceMeetingId = null, int? SourceNoteId = null);
+    int? SourceMeetingId = null, int? SourceNoteId = null,
+    int? ListId = null, bool IsFlagged = false, bool IsUrgent = false,
+    int? LinkedFollowupId = null);
 
 public record UpdateFollowupItemDto(
     string Text, int? TopicId,
     int? ResponsiblePersonId, int? ResponsibleCompanyId,
     string? DueDate, string ActionStatus,
     string? CompletedOn, string? WaitingReason,
-    string? DevelopmentNote, List<int>? DependencyItemIds);
+    string? DevelopmentNote, List<int>? DependencyItemIds,
+    int? ListId = null, bool IsFlagged = false, bool IsUrgent = false,
+    int? LinkedFollowupId = null);
+
+public record ReminderListDto(int Id, string Name, string Color, string Icon, int ItemCount);
+public record CreateReminderListDto(string Name, string Color = "#007AFF", string Icon = "list");
+public record UpdateReminderListDto(string Name, string Color, string Icon);
 
 // ──────────── Followup Change Log ────────────
 public record FollowupChangeLogDto(

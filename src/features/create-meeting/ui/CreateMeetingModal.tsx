@@ -5,31 +5,32 @@
  * Integrates ComboBox + CatalogModal for inline catalog management.
  * Supports conditional fields (planned time, next meeting, previous link).
  */
-import { useState, useEffect } from "react";
+import { useState, useEffect, useRef } from "react";
 import { useForm, Controller } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import {
-  Calendar,
   FileText,
   Link2,
-  FolderKanban,
   ChevronDown,
   ChevronUp,
 } from "lucide-react";
 
 import { Modal } from "@/shared/ui/Modal";
-import { Input } from "@/shared/ui/Input";
-import { Textarea } from "@/shared/ui/Textarea";
 import { Button } from "@/shared/ui/Button";
 import { DatePicker } from "@/shared/ui/DatePicker";
 import { TimePicker } from "@/shared/ui/TimePicker";
+import { EditableMinutesTemplate } from "./EditableMinutesTemplate";
 import { ComboBox } from "@/shared/ui/ComboBox";
 import { Checkbox } from "@/shared/ui/Checkbox";
 import { useMeetingsList } from "@/entities/meeting/api/queries";
 
 import { CatalogModal } from "@/features/manage-catalog";
 import { useCatalog, type CatalogKind } from "@/features/manage-catalog/hooks/useCatalog";
-
+import type { NoteCreatePayload } from "@/entities/note/model";
+import { useCompanies, usePersons } from "@/entities/catalog/api/queries";
+import { PARTICIPANT_ROLE_LABEL, type ParticipantRole } from "@/entities/participant/model";
+import { PersonModal } from "@/pages/catalog/PersonModal";
+import type { PersonDto } from "@/types/api";
 
 import {
   createMeetingSchema,
@@ -37,20 +38,68 @@ import {
   type CreateMeetingFormData,
 } from "../model/schema";
 
+export interface CreateMeetingSeed {
+  previousMeetingId: number;
+  title?: string;
+  subject?: string;
+  companyId?: number | null;
+  projectId?: number | null;
+  categoryId?: number | null;
+  locationId?: number | null;
+  participants?: {
+    personId: number;
+    role: ParticipantRole;
+    fullName: string;
+    title?: string;
+    companyName?: string;
+  }[];
+}
+
 export interface CreateMeetingModalProps {
   isOpen: boolean;
   onClose: () => void;
-  onSubmit: (payload: ReturnType<typeof toMeetingPayload>) => void | Promise<void>;
+  onSubmit: (payload: ReturnType<typeof toMeetingPayload> & { notes?: NoteCreatePayload[] }) => void | Promise<void>;
   isLoading?: boolean;
+  /** Zincirden “sonraki toplantıyı planla” ile ön doldurma */
+  seed?: CreateMeetingSeed | null;
 }
 
 type ActiveCatalog = CatalogKind | null;
+
+interface DraftParticipant {
+  personId: number;
+  role: ParticipantRole;
+  fullName: string;
+  title?: string;
+  companyName?: string;
+}
+
+const EMPTY_FORM: CreateMeetingFormData = {
+  title: "",
+  subject: "",
+  meetingDate: "",
+  hasPlannedStart: false,
+  plannedStart: "",
+  categoryId: null,
+  projectId: null,
+  companyId: null,
+  locationId: null,
+  hasNextMeeting: false,
+  nextMeetingDate: "",
+  nextMeetingTime: "",
+  nextMeetingNote: "",
+  previousMeetingId: null,
+  relationType: "FOLLOW_UP",
+  copy_participants: true,
+  copyOpenTasks: true,
+};
 
 export function CreateMeetingModal({
   isOpen,
   onClose,
   onSubmit,
   isLoading = false,
+  seed = null,
 }: CreateMeetingModalProps) {
   // ── Form ──────────────────────────────────────────
   const {
@@ -63,38 +112,26 @@ export function CreateMeetingModal({
     formState: { errors },
   } = useForm<CreateMeetingFormData>({
     resolver: zodResolver(createMeetingSchema) as never,
-    defaultValues: {
-      title: "",
-      subject: "",
-      meetingDate: "",
-      hasPlannedStart: false,
-      plannedStart: "",
-      categoryId: null,
-      projectId: null,
-      companyId: null,
-      locationId: null,
-      hasNextMeeting: false,
-      nextMeetingDate: "",
-      nextMeetingTime: "",
-      nextMeetingNote: "",
-      previousMeetingId: null,
-      relationType: "FOLLOW_UP",
-      copy_participants: true,
-      copyOpenTasks: true,
-    },
+    defaultValues: EMPTY_FORM,
   });
 
   // ── Catalogs ──────────────────────────────────────
-    const projects = useCatalog("projects");
+  const projects = useCatalog("projects");
   const companies = useCatalog("companies");
   const locations = useCatalog("locations");
   const categories = useCatalog("categories");
 
   const [activeCatalog, setActiveCatalog] = useState<ActiveCatalog>(null);
   const [showAdvanced, setShowAdvanced] = useState(false);
+  const [showPersonModal, setShowPersonModal] = useState(false);
+  const [personDefaultCompanyId, setPersonDefaultCompanyId] = useState<number | null>(null);
+  const [draftParticipants, setDraftParticipants] = useState<DraftParticipant[]>([]);
+  const [draftNotes, setDraftNotes] = useState<(NoteCreatePayload & { key: number })[]>([]);
+  const noteKey = useRef(1);
+  const personsQuery = usePersons();
+  const companiesQuery = useCompanies();
 
   // ── Watched values ────────────────────────────────
-  const hasPlannedStart = watch("hasPlannedStart");
   const hasNextMeeting = watch("hasNextMeeting");
   const previousMeetingId = watch("previousMeetingId");
 
@@ -108,17 +145,91 @@ export function CreateMeetingModal({
     label: `${m.meetingDate} · #${m.id} · ${m.title}`,
   }));
 
-  // Reset form on close
+  // Açılışta seed uygula; kapanışta sıfırla
   useEffect(() => {
     if (!isOpen) {
-      reset();
+      reset(EMPTY_FORM);
       setShowAdvanced(false);
+      setShowPersonModal(false);
+      setPersonDefaultCompanyId(null);
+      setDraftParticipants([]);
+      setDraftNotes([]);
+      return;
     }
-  }, [isOpen, reset]);
+
+    if (seed) {
+      reset({
+        ...EMPTY_FORM,
+        title: seed.title ?? "",
+        subject: seed.subject ?? "",
+        companyId: seed.companyId ?? null,
+        projectId: seed.projectId ?? null,
+        categoryId: seed.categoryId ?? null,
+        locationId: seed.locationId ?? null,
+        previousMeetingId: seed.previousMeetingId,
+        relationType: "CONTINUATION",
+        copy_participants: true,
+        copyOpenTasks: true,
+      });
+      setShowAdvanced(true);
+      setDraftParticipants(
+        (seed.participants ?? []).map((person) => ({
+          personId: person.personId,
+          role: person.role,
+          fullName: person.fullName,
+          title: person.title,
+          companyName: person.companyName,
+        })),
+      );
+      setDraftNotes([]);
+    }
+  }, [isOpen, seed, reset]);
+
+  function addParticipants(personIds: number[], knownPeople?: PersonDto[]) {
+    const people = knownPeople ?? personsQuery.data ?? [];
+    setDraftParticipants((current) => {
+      const next = [...current];
+      for (const personId of personIds) {
+        if (next.some((person) => person.personId === personId)) continue;
+        const person = people.find((candidate) => candidate.id === personId);
+        next.push({
+          personId,
+          role: "ATTENDEE",
+          fullName: person?.fullName ?? "Kişi",
+          title: person?.title ?? undefined,
+          companyName: person?.companyName ?? undefined,
+        });
+      }
+      return next;
+    });
+  }
+
+  function openPersonModal(defaultCompanyId: number | null) {
+    setPersonDefaultCompanyId(defaultCompanyId);
+    setShowPersonModal(true);
+  }
+
+  async function handlePersonSaved(person?: PersonDto) {
+    setShowPersonModal(false);
+    await personsQuery.refetch();
+    if (person) addParticipants([person.id], [person, ...(personsQuery.data ?? [])]);
+  }
+
+  function addNote(note: NoteCreatePayload) {
+    const key = noteKey.current++;
+    setDraftNotes((current) => [...current, { ...note, key }]);
+  }
 
   // ── Submit ────────────────────────────────────────
   async function onFormSubmit(data: CreateMeetingFormData) {
-    const payload = toMeetingPayload(data);
+    const payload = {
+      ...toMeetingPayload(data),
+      participants: draftParticipants.map((person) => ({
+        personId: person.personId,
+        role: person.role,
+      })),
+      notes: draftNotes.map(({ key: _key, ...note }) => note),
+    };
     await onSubmit(payload);
   }
 
@@ -150,147 +261,76 @@ export function CreateMeetingModal({
         isOpen={isOpen}
         onClose={onClose}
         title="Yeni Toplantı Oluştur"
-        description="Toplantı bilgilerini doldurun. Oluşturduktan sonra not ve katılımcı ekleyebilirsiniz."
+        description="Toplantı bilgilerini doldurun. Katılımcıları buradan ekleyebilir, notları oluşturduktan sonra girebilirsiniz."
         size="2xl"
+        className="md:max-w-4xl"
+        footer={
+          <div className="flex flex-col-reverse gap-2 md:flex-row md:items-center md:justify-end md:gap-3">
+            <Button
+              type="button"
+              variant="secondary"
+              onClick={onClose}
+              disabled={isLoading}
+              className="md:w-auto"
+            >
+              İptal
+            </Button>
+            <Button
+              type="submit"
+              form="create-meeting-form"
+              variant="primary"
+              isLoading={isLoading}
+              className="h-auto w-full rounded-full py-3.5 text-sm md:h-10 md:w-auto md:rounded-lg md:py-0"
+            >
+              Toplantı Oluştur
+            </Button>
+          </div>
+        }
       >
         <form
+          id="create-meeting-form"
           onSubmit={handleSubmit(onFormSubmit as never)}
           className="space-y-6"
           noValidate
         >
-          {/* ── SECTION 1: Core Fields ──────────────── */}
-          <section className="space-y-4">
-            <Input
-              label="Toplantı Başlığı *"
-              placeholder="Örn: Q3 Stratejik Planlama Toplantısı"
-              {...register("title")}
-              error={errors.title?.message}
-              disabled={isLoading}
-              autoFocus
-            />
+          <EditableMinutesTemplate
+            register={register}
+            control={control}
+            setValue={setValue}
+            errors={errors}
+            disabled={isLoading}
+            locationOptions={locations.options}
+            companyOptions={companies.options}
+            projectOptions={projects.options}
+            categoryOptions={categories.options}
+            onAddCompany={() => setActiveCatalog("companies")}
+            onAddLocation={() => setActiveCatalog("locations")}
+            onAddProject={() => setActiveCatalog("projects")}
+            onAddCategory={() => setActiveCatalog("categories")}
+            onAddPerson={openPersonModal}
+            participants={draftParticipants.map((person) => ({
+              personId: person.personId,
+              fullName: person.fullName,
+              companyName: person.companyName,
+              roleLabel: PARTICIPANT_ROLE_LABEL[person.role],
+            }))}
+            people={(personsQuery.data ?? []).filter((person) => person.isActive).map((person) => ({
+              id: person.id,
+              fullName: person.fullName,
+              companyId: person.companyId,
+              companyName: person.companyName ?? undefined,
+              title: person.title ?? undefined,
+            }))}
+            notes={draftNotes}
+            onAddParticipants={addParticipants}
+            onRemoveParticipant={(personId) =>
+              setDraftParticipants((current) => current.filter((person) => person.personId !== personId))
+            }
+            onAddNote={addNote}
+            onRemoveNote={(key) => setDraftNotes((current) => current.filter((note) => note.key !== key))}
+          />
 
-            <Textarea
-              label="Konu / Gündem"
-              placeholder="Toplantının gündem maddeleri ve kapsamı..."
-              {...register("subject")}
-              helperText="İsteğe bağlı — tutanakta görünür"
-              disabled={isLoading}
-            />
-          </section>
-
-          {/* ── SECTION 2: Date & Time ─────────────── */}
-          <section>
-            <h3 className="mb-3 flex items-center gap-2 text-sm font-semibold text-surface-700 dark:text-surface-300">
-              <Calendar className="h-4 w-4" />
-              Tarih ve Saat
-            </h3>
-            <div className="grid gap-4 sm:grid-cols-1">
-              <Controller
-                name="meetingDate"
-                control={control}
-                render={({ field }) => (
-                  <DatePicker
-                    label="Toplantı Tarihi *"
-                    value={field.value}
-                    onChange={field.onChange}
-                    error={errors.meetingDate?.message}
-                    disabled={isLoading}
-                  />
-                )}
-              />
-
-              <div className="space-y-2">
-                <Controller
-                  name="hasPlannedStart"
-                  control={control}
-                  render={({ field }) => (
-                    <Checkbox
-                      label="Planlanan saat belirle"
-                      checked={field.value}
-                      onChange={field.onChange}
-                      disabled={isLoading}
-                    />
-                  )}
-                />
-                {hasPlannedStart && (
-                  <Controller
-                    name="plannedStart"
-                    control={control}
-                    render={({ field }) => (
-                      <TimePicker
-                        value={field.value}
-                        onChange={field.onChange}
-                        error={errors.plannedStart?.message}
-                        disabled={isLoading}
-                      />
-                    )}
-                  />
-                )}
-              </div>
-            </div>
-          </section>
-
-          {/* ── SECTION 3: Catalog Selectors ───────── */}
-          <section>
-            <h3 className="mb-3 flex items-center gap-2 text-sm font-semibold text-surface-700 dark:text-surface-300">
-              <FolderKanban className="h-4 w-4" />
-              Sınıflandırma
-            </h3>
-            <div className="grid gap-4 sm:grid-cols-1">
-              
-              <Controller
-                name="projectId"
-                control={control}
-                render={({ field }) => (
-                  <ComboBox
-                    label="Proje"
-                    value={field.value}
-                    onChange={field.onChange}
-                    options={projects.options}
-                    placeholder="Proje seçin"
-                    onAddNew={() => setActiveCatalog("projects")}
-                    addNewLabel="Proje"
-                    disabled={isLoading}
-                  />
-                )}
-              />
-              <Controller
-                name="companyId"
-                control={control}
-                render={({ field }) => (
-                  <ComboBox
-                    label="Firma"
-                    value={field.value}
-                    onChange={field.onChange}
-                    options={companies.options}
-                    groups={companies.companyGroups.length > 0 ? companies.companyGroups : undefined}
-                    placeholder="Firma seçin"
-                    onAddNew={() => setActiveCatalog("companies")}
-                    addNewLabel="Firma"
-                    disabled={isLoading}
-                  />
-                )}
-              />
-              <Controller
-                name="locationId"
-                control={control}
-                render={({ field }) => (
-                  <ComboBox
-                    label="Toplantı Yeri"
-                    value={field.value}
-                    onChange={field.onChange}
-                    options={locations.options}
-                    placeholder="Yer seçin"
-                    onAddNew={() => setActiveCatalog("locations")}
-                    addNewLabel="Yer"
-                    disabled={isLoading}
-                  />
-                )}
-              />
-            </div>
-          </section>
-
-          {/* ── SECTION 4: Advanced (collapsible) ──── */}
+          {/* ── Advanced (collapsible) ──── */}
           <div className="border-t border-surface-200 pt-4 dark:border-surface-700">
             <button
               type="button"
@@ -310,26 +350,6 @@ export function CreateMeetingModal({
 
             {showAdvanced && (
               <div className="mt-4 space-y-5">
-                {/* Category */}
-                <div className="rounded-lg border border-surface-200 bg-surface-50/50 p-4 dark:border-surface-700 dark:bg-surface-900/30">
-                  <Controller
-                    name="categoryId"
-                    control={control}
-                    render={({ field }) => (
-                      <ComboBox
-                        label="Toplantı Kategorisi"
-                        value={field.value}
-                        onChange={field.onChange}
-                        options={categories.options}
-                        placeholder="Kategori seçin"
-                        onAddNew={() => setActiveCatalog("categories")}
-                        addNewLabel="Kategori"
-                        disabled={isLoading}
-                      />
-                    )}
-                  />
-                </div>
-
                 {/* Next meeting */}
                 <div className="rounded-lg border border-surface-200 bg-surface-50/50 p-4 dark:border-surface-700 dark:bg-surface-900/30">
                   <Controller
@@ -447,25 +467,6 @@ export function CreateMeetingModal({
               </div>
             )}
           </div>
-
-          {/* ── Actions ───────────────────────────── */}
-          <div className="flex items-center justify-end gap-3 border-t border-surface-200 pt-4 dark:border-surface-700">
-            <Button
-              type="button"
-              variant="secondary"
-              onClick={onClose}
-              disabled={isLoading}
-            >
-              İptal
-            </Button>
-            <Button
-              type="submit"
-              variant="primary"
-              isLoading={isLoading}
-            >
-              Toplantı Oluştur
-            </Button>
-          </div>
         </form>
       </Modal>
 
@@ -479,6 +480,15 @@ export function CreateMeetingModal({
           onDeleted={() => handleCatalogCreated(activeCatalog)}
         />
       )}
+
+      <PersonModal
+        isOpen={showPersonModal}
+        onClose={() => setShowPersonModal(false)}
+        onSaved={handlePersonSaved}
+        editingPerson={null}
+        companies={companiesQuery.data ?? []}
+        defaultCompanyId={personDefaultCompanyId}
+      />
     </>
   );
 }

@@ -1,7 +1,6 @@
 import { NavLink } from "react-router-dom";
 import {
-  LayoutDashboard, CalendarDays, CalendarClock, Calendar,
-  ClipboardCheck, Search, BarChart3, Users, Settings,
+  CalendarDays, Calendar, ClipboardCheck, Users, Settings,
   X, PanelLeftClose, PanelLeftOpen, ShieldCheck,
 } from "lucide-react";
 import { cn } from "@/shared/lib/cn";
@@ -10,7 +9,7 @@ import type { UserRole } from "@/entities/user/model";
 
 interface NavItem {
   to: string;
-  icon: typeof LayoutDashboard;
+  icon: typeof CalendarDays;
   label: string;
   end: boolean;
   /** Minimum roles required — undefined = visible to all */
@@ -24,16 +23,9 @@ interface NavSection {
 
 const NAV_SECTIONS: NavSection[] = [
   {
-    title: null,
-    items: [
-      { to: "/", icon: LayoutDashboard, label: "Gösterge Paneli", end: true },
-    ],
-  },
-  {
     title: "Toplantılar",
     items: [
       { to: "/meetings", icon: CalendarDays, label: "Toplantılar", end: false },
-      { to: "/planned", icon: CalendarClock, label: "Planlı Toplantılar", end: false },
       { to: "/calendar", icon: Calendar, label: "Takvim", end: false },
     ],
   },
@@ -41,15 +33,13 @@ const NAV_SECTIONS: NavSection[] = [
     title: "Takip",
     items: [
       { to: "/followups", icon: ClipboardCheck, label: "Takip ve Terminler", end: false },
-      { to: "/search", icon: Search, label: "Tüm Belgelerde Ara", end: false },
-      { to: "/reports", icon: BarChart3, label: "Genel Rapor", end: false },
     ],
   },
   {
     title: "Yönetim",
     items: [
-      { to: "/catalog", icon: Users, label: "Kişiler ve Tanımlar", end: false, roles: ["Admin", "CatalogManager"] },
-      { to: "/user-management", icon: ShieldCheck, label: "Kullanıcı Yönetimi", end: false, roles: ["Admin"] },
+      { to: "/catalog", icon: Users, label: "Tanım Tabloları", end: false, roles: ["Admin", "CatalogManager"] },
+      { to: "/user-management", icon: ShieldCheck, label: "Kullanıcı Rol Yönetimi", end: false, roles: ["Admin"] },
       { to: "/settings", icon: Settings, label: "Ayarlar", end: false },
     ],
   },
@@ -87,64 +77,55 @@ export function Sidebar({ isOpen, onClose, isCollapsed, onToggleCollapse }: Side
       {/* Sidebar panel */}
       <aside
         className={cn(
-          "fixed inset-y-0 left-0 z-50 flex flex-col border-r border-surface-200 bg-white transition-all duration-300 ease-in-out dark:border-surface-700 dark:bg-surface-900",
-          "lg:static lg:translate-x-0",
+          "fixed inset-y-0 left-0 z-50 flex flex-col border border-slate-900/10 bg-white/55 backdrop-blur-xl transition-all duration-300 ease-in-out dark:border-white/10 dark:bg-slate-950/55",
+          "lg:static lg:my-3 lg:ml-3 lg:h-auto lg:self-stretch lg:rounded-3xl lg:translate-x-0",
           isOpen ? "translate-x-0" : "-translate-x-full",
           isCollapsed ? "lg:w-[72px]" : "lg:w-64",
-          // Mobile always shows expanded
           "w-64",
         )}
       >
         {/* ── Logo Header ──────────────────────────── */}
-        <div className="flex h-16 items-center justify-between border-b border-surface-100 px-3 dark:border-surface-800">
-          <button
-            onClick={onToggleCollapse}
+        <div
+          className={cn(
+            "flex border-b border-slate-900/10 px-3 dark:border-white/10",
+            isCollapsed
+              ? "h-auto flex-col items-center gap-2 py-3 lg:h-auto"
+              : "h-16 items-center justify-between",
+          )}
+        >
+          <div
             className={cn(
-              "group flex items-center gap-3 rounded-xl px-2 py-2 transition-all duration-200",
-              "hover:bg-surface-50 active:scale-[0.97] dark:hover:bg-surface-800",
-              isCollapsed && "lg:justify-center lg:px-0",
+              "flex items-center overflow-hidden",
+              isCollapsed ? "h-9 w-9 justify-center" : "h-9 w-40",
             )}
-            title={isCollapsed ? "Menüyü Genişlet" : "Menüyü Daralt"}
           >
-            {/* Logo */}
-            <div className={cn(
-              "flex items-center transition-all duration-200 overflow-hidden",
-              isCollapsed ? "w-9 h-9 justify-center" : "w-40 h-9"
-            )}>
-              <img 
-                src="/logo.png" 
-                alt="Logo" 
-                className={cn(
-                  "h-6 max-w-none transition-all duration-200 dark:brightness-0 dark:invert",
-                  isCollapsed ? "object-left object-cover w-7" : "object-contain w-auto"
-                )}
-              />
-            </div>
-          </button>
+            <img
+              src="/logo.png"
+              alt="WAM"
+              className={cn(
+                "h-6 max-w-none dark:brightness-0 dark:invert",
+                isCollapsed ? "w-7 object-cover object-left" : "w-auto object-contain",
+              )}
+            />
+          </div>
 
-          {/* Mobile close */}
           <button
+            type="button"
             onClick={onClose}
-            className="rounded-lg p-1.5 text-surface-400 hover:bg-surface-100 lg:hidden dark:hover:bg-surface-800"
+            className="rounded-lg p-1.5 text-shell-muted hover:bg-black/5 lg:hidden dark:hover:bg-white/10"
             aria-label="Menüyü kapat"
           >
             <X className="h-5 w-5" />
           </button>
 
-          {/* Desktop collapse indicator */}
           <button
+            type="button"
             onClick={onToggleCollapse}
-            className={cn(
-              "hidden lg:flex h-7 w-7 items-center justify-center rounded-lg text-surface-400 hover:bg-surface-100 hover:text-surface-600 transition-colors dark:hover:bg-surface-800 dark:hover:text-surface-300",
-              isCollapsed && "lg:hidden",
-            )}
-            title={isCollapsed ? "Genişlet" : "Daralt"}
+            className="hidden h-7 w-7 items-center justify-center rounded-lg text-shell-muted transition-colors hover:bg-black/5 hover:text-shell-fg lg:flex dark:hover:bg-white/10"
+            aria-label={isCollapsed ? "Menüyü genişlet" : "Menüyü daralt"}
+            title={isCollapsed ? "Menüyü Genişlet" : "Menüyü Daralt"}
           >
-            {isCollapsed ? (
-              <PanelLeftOpen className="h-4 w-4" />
-            ) : (
-              <PanelLeftClose className="h-4 w-4" />
-            )}
+            {isCollapsed ? <PanelLeftOpen className="h-4 w-4" /> : <PanelLeftClose className="h-4 w-4" />}
           </button>
         </div>
 
@@ -156,12 +137,12 @@ export function Sidebar({ isOpen, onClose, isCollapsed, onToggleCollapse }: Side
             return (
               <div key={si} className={cn(si > 0 && "mt-6")}>
                 {section.title && !isCollapsed && (
-                  <p className="mb-2 px-3 text-2xs font-semibold uppercase tracking-widest text-surface-400 dark:text-surface-500 transition-opacity duration-200">
+                  <p className="mb-2 px-3 text-2xs font-semibold uppercase tracking-widest text-shell-muted/70 transition-opacity duration-200">
                     {section.title}
                   </p>
                 )}
                 {section.title && isCollapsed && (
-                  <div className="mx-auto mb-2 hidden h-px w-8 bg-surface-200 lg:block dark:bg-surface-700" />
+                  <div className="mx-auto mb-2 hidden h-px w-8 bg-slate-900/10 lg:block dark:bg-white/10" />
                 )}
                 <div className="space-y-1">
                   {visibleItems.map(({ to, icon: Icon, label, end }) => (
@@ -173,13 +154,13 @@ export function Sidebar({ isOpen, onClose, isCollapsed, onToggleCollapse }: Side
                       title={isCollapsed ? label : undefined}
                       className={({ isActive }) =>
                         cn(
-                          "group flex items-center rounded-xl text-sm font-medium transition-all duration-150",
+                          "group flex items-center rounded-full text-sm font-medium transition-all duration-150",
                           isCollapsed
                             ? "lg:justify-center lg:px-0 lg:py-2.5 px-3 py-2.5"
                             : "gap-3 px-3 py-2.5",
                           isActive
-                            ? "bg-brand-50 text-brand-700 shadow-sm dark:bg-brand-950/50 dark:text-brand-400"
-                            : "text-surface-600 hover:bg-surface-50 hover:text-surface-900 dark:text-surface-400 dark:hover:bg-surface-800 dark:hover:text-surface-200",
+                            ? "bg-blue-600 text-white shadow-[0_8px_20px_rgba(37,99,235,0.25)] dark:bg-blue-400 dark:text-slate-950"
+                            : "text-shell-muted hover:bg-black/5 hover:text-shell-fg dark:hover:bg-white/5",
                         )
                       }
                     >
@@ -201,15 +182,15 @@ export function Sidebar({ isOpen, onClose, isCollapsed, onToggleCollapse }: Side
         </nav>
 
         {/* ── Footer ───────────────────────────────── */}
-        <div className="border-t border-surface-100 px-3 py-3 dark:border-surface-800">
+        <div className="border-t border-slate-900/10 px-3 py-3 dark:border-white/10">
           <p className={cn(
-            "text-center text-2xs text-surface-400 transition-all duration-200",
+            "text-center text-2xs text-shell-muted/70 transition-all duration-200",
             isCollapsed ? "lg:hidden" : "",
           )}>
             v1.0.0 — Kurumsal Toplantı Yönetimi
           </p>
           {isCollapsed && (
-            <p className="hidden lg:block text-center text-2xs text-surface-400">v1.0</p>
+            <p className="hidden lg:block text-center text-2xs text-shell-muted/70">v1.0</p>
           )}
         </div>
       </aside>

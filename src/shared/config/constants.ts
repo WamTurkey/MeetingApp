@@ -142,3 +142,47 @@ export const FOLLOWUP_BUCKET_COLOR: Record<FollowupBucket, string> = {
   NO_DATE: "bg-bg-muted text-fg-muted border-border",
   CLOSED: "bg-success-50 text-success-700 border-success-200 dark:bg-success-950/30 dark:text-success-300 dark:border-success-800",
 };
+
+/** ── Followup / Reminder Priority (3 derece) ─────── */
+export const FOLLOWUP_PRIORITY = {
+  NORMAL: "NORMAL",
+  HIGH: "HIGH",
+  URGENT: "URGENT",
+} as const;
+
+export type FollowupPriority = (typeof FOLLOWUP_PRIORITY)[keyof typeof FOLLOWUP_PRIORITY];
+
+export const FOLLOWUP_PRIORITY_LABEL: Record<FollowupPriority, string> = {
+  NORMAL: "Normal",
+  HIGH: "Yüksek",
+  URGENT: "Acil",
+};
+
+export const FOLLOWUP_PRIORITY_OPTIONS = (
+  Object.keys(FOLLOWUP_PRIORITY) as FollowupPriority[]
+).map((value) => ({ value, label: FOLLOWUP_PRIORITY_LABEL[value] }));
+
+/** Mevcut isUrgent / isFlagged alanlarından 3 seviyeli öncelik türetir. */
+export function getFollowupPriority(flags: {
+  isUrgent?: boolean | null;
+  isFlagged?: boolean | null;
+}): FollowupPriority {
+  if (flags.isUrgent) return FOLLOWUP_PRIORITY.URGENT;
+  if (flags.isFlagged) return FOLLOWUP_PRIORITY.HIGH;
+  return FOLLOWUP_PRIORITY.NORMAL;
+}
+
+/** Öncelik seçimini API bayraklarına çevirir. */
+export function priorityToFlags(priority: FollowupPriority): {
+  isUrgent: boolean;
+  isFlagged: boolean;
+} {
+  switch (priority) {
+    case FOLLOWUP_PRIORITY.URGENT:
+      return { isUrgent: true, isFlagged: false };
+    case FOLLOWUP_PRIORITY.HIGH:
+      return { isUrgent: false, isFlagged: true };
+    default:
+      return { isUrgent: false, isFlagged: false };
+  }
+}

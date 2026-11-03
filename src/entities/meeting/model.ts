@@ -1,5 +1,6 @@
 import type { BaseEntity } from "@/shared/types/common";
 import type { MeetingStatus } from "@/shared/config/constants";
+import type { MeetingLinkDto, UpdateMeetingRequest } from "@/types/api";
 
 export interface Meeting extends BaseEntity {
   title: string;
@@ -10,7 +11,7 @@ export interface Meeting extends BaseEntity {
   status: MeetingStatus;
   statusDisplay?: string;
   version: number;
-  linkedMeetings?: any[];
+  linkedMeetings?: MeetingLinkDto[];
   projectId?: number | null;
   projectName?: string | null;
   companyId?: number | null;
@@ -53,4 +54,25 @@ export interface MeetingUpdatePayload {
   categoryId?: number;
   nextMeetingAt?: string;
   nextMeetingNote?: string;
+}
+
+export function toUpdateMeetingRequest(
+  meeting: Meeting,
+  patch: Partial<UpdateMeetingRequest> = {},
+): UpdateMeetingRequest {
+  return {
+    title: meeting.title,
+    description: meeting.description || undefined,
+    subject: meeting.subject,
+    meetingDate: meeting.meetingDate,
+    plannedStart: meeting.plannedStart ?? undefined,
+    status: meeting.status,
+    projectId: meeting.projectId ?? undefined,
+    companyId: meeting.companyId ?? undefined,
+    locationId: meeting.locationId ?? undefined,
+    categoryId: meeting.categoryId ?? undefined,
+    nextMeetingAt: meeting.nextMeetingAt ?? undefined,
+    nextMeetingNote: meeting.nextMeetingNote,
+    ...patch,
+  };
 }

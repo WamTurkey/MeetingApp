@@ -1,7 +1,6 @@
 /**
- * MeetingFilterBar — combined search, status, and date filter controls.
- *
- * Uses global SearchBar component + debounce for search input.
+ * MeetingFilterBar — search field for the meetings list.
+ * Status and date range live in MeetingFilterModal.
  */
 import { useState, useEffect } from "react";
 import { CalendarDays, X } from "lucide-react";
@@ -9,6 +8,7 @@ import { SearchBar } from "@/shared/ui/SearchBar";
 import { Input } from "@/shared/ui/Input";
 import { Select } from "@/shared/ui/Select";
 import { Button } from "@/shared/ui/Button";
+import { Modal } from "@/shared/ui/Modal";
 import { useDebounce } from "@/shared/hooks/useDebounce";
 import { MEETING_STATUS_OPTIONS } from "@/entities/meeting/constants";
 import type { MeetingStatus } from "@/shared/config/constants";
@@ -45,68 +45,67 @@ export function MeetingFilterBar({
     }
   }, [debouncedSearch]); // eslint-disable-line react-hooks/exhaustive-deps
 
+  return (
+    <SearchBar
+      className="w-full"
+      placeholder="Toplantı ara..."
+      value={searchInput}
+      onChange={setSearchInput}
+    />
+  );
+}
+
+export function hasActiveMeetingFilters(filters: MeetingFilters): boolean {
+  return filters.status !== "" || filters.dateFrom !== "" || filters.dateTo !== "";
+}
+
+export function MeetingFilterModal({
+  isOpen,
+  onClose,
+  filters,
+  onFilterChange,
+}: MeetingFilterBarProps & { isOpen: boolean; onClose: () => void }) {
   function handleClear() {
-    setSearchInput("");
-    onFilterChange(INITIAL_FILTERS);
+    onFilterChange({ ...filters, status: "", dateFrom: "", dateTo: "" });
   }
 
-  const hasActiveFilters =
-    filters.status !== "" ||
-    filters.search !== "" ||
-    filters.dateFrom !== "" ||
-    filters.dateTo !== "";
+  const hasActive = hasActiveMeetingFilters(filters);
 
   return (
-    <div className="flex flex-col gap-3 sm:flex-row sm:items-end sm:flex-wrap">
-      {/* Search — global SearchBar */}
-      <div className="flex-1 min-w-[200px]">
-        <SearchBar
-          placeholder="Toplantı ara..."
-          value={searchInput}
-          onChange={setSearchInput}
-        />
-      </div>
-
-      {/* Status filter */}
-      <div className="w-full sm:w-44">
+    <Modal isOpen={isOpen} onClose={onClose} title="Filtrele" size="sm">
+      <div className="space-y-4">
         <Select
+          label="Durum"
           options={MEETING_STATUS_OPTIONS}
           value={filters.status}
           onChange={(e) => onFilterChange({ ...filters, status: e.target.value as MeetingStatus | "" })}
         />
-      </div>
-
-      {/* Date range */}
-      <div className="flex items-center gap-2">
-        <div className="w-36">
+        <div className="grid grid-cols-2 gap-3">
           <Input
             type="date"
+            label="Başlangıç"
             value={filters.dateFrom}
             onChange={(e) => onFilterChange({ ...filters, dateFrom: e.target.value })}
             icon={<CalendarDays className="h-3.5 w-3.5" />}
           />
-        </div>
-        <span className="text-xs text-surface-400">—</span>
-        <div className="w-36">
           <Input
             type="date"
+            label="Bitiş"
             value={filters.dateTo}
             onChange={(e) => onFilterChange({ ...filters, dateTo: e.target.value })}
           />
         </div>
+        {hasActive && (
+          <Button
+            variant="ghost"
+            size="sm"
+            onClick={handleClear}
+            icon={<X className="h-3.5 w-3.5" />}
+          >
+            Temizle
+          </Button>
+        )}
       </div>
-
-      {/* Clear filters */}
-      {hasActiveFilters && (
-        <Button
-          variant="ghost"
-          size="sm"
-          onClick={handleClear}
-          icon={<X className="h-3.5 w-3.5" />}
-        >
-          Temizle
-        </Button>
-      )}
-    </div>
+    </Modal>
   );
 }

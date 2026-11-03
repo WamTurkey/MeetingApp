@@ -28,6 +28,9 @@ export interface AddNoteFormProps {
   onCancel?: () => void;
   isLoading?: boolean;
   initialContent?: string;
+  layout?: "inline" | "stacked";
+  /** Dışarıda başka bir form varken iç içe `<form>` açmamak için. */
+  embedded?: boolean;
 }
 
 /**
@@ -48,6 +51,8 @@ export function AddNoteForm({
   onCancel,
   isLoading = false,
   initialContent = "",
+  layout = "inline",
+  embedded = false,
 }: AddNoteFormProps) {
   const personOptions = usePersonOptions();
   const RESPONSIBLE_OPTIONS = [
@@ -69,9 +74,7 @@ export function AddNoteForm({
   const [error, setError] = useState("");
   const textareaRef = useRef<HTMLTextAreaElement>(null);
 
-  async function handleSubmit(e: FormEvent) {
-    e.preventDefault();
-
+  async function submitNote() {
     if (!content.trim()) {
       setError("Not içeriği boş olamaz.");
       return;
@@ -79,30 +82,193 @@ export function AddNoteForm({
 
     setError("");
     await onSubmit({
-      
       content: content.trim(),
       noteType: type,
       dueDate: hasDeadline && deadline ? deadline : undefined,
       responsiblePersonId: responsibleId ? Number(responsibleId) : undefined,
-      actionStatus: status ? (status as ActionStatus) : undefined,
+      actionStatus: status ? (status as ActionStatus) : hasDeadline ? "OPEN" : undefined,
     });
 
-    // Reset form on success
     setContent("");
     setType("NOTE");
     setHasDeadline(false);
     setDeadline("");
     setResponsibleId("");
     setStatus("");
-    // Refocus textarea for next note
     setTimeout(() => textareaRef.current?.focus(), 0);
+  }
+
+  async function handleSubmit(e: FormEvent) {
+    e.preventDefault();
+    await submitNote();
   }
 
   // Filter out the empty "Tüm Tipler" option
   const typeOptions = NOTE_TYPE_OPTIONS.filter((o) => o.value !== "");
 
+  if (embedded && layout !== "stacked") {
+    return (
+      <NoteFormShell
+        embedded
+        onSubmit={handleSubmit}
+        className="min-w-0 space-y-2 overflow-hidden px-2 py-2"
+      >
+        <div className="flex min-w-0 items-start gap-2">
+          <textarea
+            ref={textareaRef}
+            value={content}
+            onChange={(e) => {
+              setContent(e.target.value);
+              e.target.style.height = "auto";
+              e.target.style.height = `${e.target.scrollHeight}px`;
+              if (error) setError("");
+            }}
+            onKeyDown={(e) => {
+              if (e.key === "Enter" && !e.shiftKey) {
+                e.preventDefault();
+                void submitNote();
+              }
+            }}
+            className={cn(
+              "min-h-[32px] min-w-0 flex-1 resize-none overflow-hidden rounded border bg-white p-1 text-sm leading-relaxed text-surface-900 placeholder:text-surface-400 focus:outline-none focus:ring-1 dark:bg-surface-900 dark:text-surface-100",
+              error ? "border-danger-500 focus:ring-danger-500" : "border-surface-200 focus:border-brand-500 focus:ring-brand-500",
+            )}
+            rows={1}
+            placeholder="Not metni"
+          />
+          <SpeechToTextButton
+            size="sm"
+            showLabel
+            label="Sesle Dikte"
+            className="max-w-full shrink-0"
+            onTranscript={(text) => {
+              setContent((prev) => (prev ? prev + " " + text : text));
+              if (error) setError("");
+            }}
+          />
+        </div>
+        {error && <p className="text-xs text-danger-500">{error}</p>}
+        <div className="flex min-w-0 flex-wrap items-center gap-2">
+          <div className="min-w-0 w-28 shrink-0">
+            <Select
+              options={typeOptions}
+              value={type}
+              onChange={(e) => setType(e.target.value as NoteType)}
+              disabled={isLoading}
+              className="h-8 text-xs !py-1 !px-2 bg-white dark:bg-surface-900"
+            />
+          </div>
+          <label className="flex items-center gap-1.5 cursor-pointer select-none">
+            <Checkbox
+              checked={hasDeadline}
+              onChange={(c) => { setHasDeadline(c); if (!c) { setDeadline(""); setResponsibleId(""); } }}
+              disabled={isLoading}
+            />
+            <span className="text-xs text-surface-600">Termin</span>
+          </label>
+          <Button
+            type="button"
+            variant="ghost"
+            size="sm"
+            className="!p-1 text-brand-600 hover:text-brand-700 hover:bg-brand-50"
+            onClick={() => void submitNote()}
+          >
+            <Plus className="h-4 w-4" />
+          </Button>
+        </div>
+        {hasDeadline && (
+          <div className="grid min-w-0 grid-cols-1 gap-2 sm:grid-cols-2">
+            <Input
+              type="date"
+              value={deadline}
+              onChange={(e) => setDeadline(e.target.value)}
+              disabled={isLoading}
+              className="h-8 text-xs !py-1 !px-2"
+            />
+            <Select
+              options={RESPONSIBLE_OPTIONS}
+              value={responsibleId}
+              onChange={(e) => setResponsibleId(e.target.value)}
+              disabled={isLoading}
+              className="h-8 text-xs !py-1 !px-2"
+            />
+          </div>
+        )}
+      </NoteFormShell>
+    );
+  }
+
+  if (layout === "stacked") {
+    return (
+      <NoteFormShell embedded={embedded} onSubmit={handleSubmit} className="flex flex-col gap-3">
+        <div className="flex items-center justify-between">
+          <label className="text-xs font-medium text-surface-600">Not metni *</label>
+          <SpeechToTextButton
+            size="sm"
+            showLabel
+            label="Sesle Dikte"
+            onTranscript={(text) => {
+              setContent((prev) => (prev ? prev + " " + text : text));
+              if (error) setError("");
+            }}
+          />
+        </div>
+        <textarea
+          ref={textareaRef}
+          value={content}
+          onChange={(e) => {
+            setContent(e.target.value);
+            if (error) setError("");
+          }}
+          className={cn(
+            "min-h-24 w-full rounded-2xl border bg-surface-100 p-3 text-sm text-surface-900 placeholder:text-surface-400 dark:bg-surface-900 dark:text-surface-100 dark:placeholder:text-surface-500",
+            error ? "border-danger-500" : "border-[#C8D5D1]",
+          )}
+          placeholder="Not metni yazın veya mikrofonla sesle dikte edin..."
+          autoFocus
+        />
+        {error && <p className="text-xs text-danger-500">{error}</p>}
+        <Select
+          label="Tür"
+          options={typeOptions}
+          value={type}
+          onChange={(e) => setType(e.target.value as NoteType)}
+          disabled={isLoading}
+        />
+        <label className="flex items-center gap-2 text-sm text-surface-600">
+          <Checkbox
+            checked={hasDeadline}
+            onChange={(c) => { setHasDeadline(c); if (!c) { setDeadline(""); setResponsibleId(""); } }}
+            disabled={isLoading}
+          />
+          Termin ekle
+        </label>
+        {hasDeadline && (
+          <>
+            <Input type="date" label="Termin Tarihi" value={deadline} onChange={(e) => setDeadline(e.target.value)} />
+            <Select label="Sorumlu" options={RESPONSIBLE_OPTIONS} value={responsibleId} onChange={(e) => setResponsibleId(e.target.value)} />
+          </>
+        )}
+        <div className="flex flex-col-reverse gap-2 pt-2">
+          {onCancel && (
+            <Button type="button" variant="secondary" onClick={onCancel}>İptal</Button>
+          )}
+          <Button
+            type={embedded ? "button" : "submit"}
+            variant="primary"
+            isLoading={isLoading}
+            className="h-auto w-full rounded-full py-3.5 text-sm"
+            onClick={embedded ? () => void submitNote() : undefined}
+          >
+            Kaydet
+          </Button>
+        </div>
+      </NoteFormShell>
+    );
+  }
+
   return (
-    <form onSubmit={handleSubmit} className="flex w-full items-start gap-2 text-sm py-2 px-3 bg-surface-50/80 dark:bg-surface-800/50 border-b border-brand-200 dark:border-brand-800/50 relative shadow-inner ring-1 ring-inset ring-brand-100 dark:ring-brand-900/30">
+    <NoteFormShell embedded={embedded} onSubmit={handleSubmit} className="flex w-full items-start gap-2 text-sm py-2 px-3 bg-surface-50/80 dark:bg-surface-800/50 border-b border-brand-200 dark:border-brand-800/50 relative shadow-inner ring-1 ring-inset ring-brand-100 dark:ring-brand-900/30">
       <div className="w-6 shrink-0 pt-1.5 flex justify-center text-surface-300 opacity-50 cursor-not-allowed">
         <GripVertical className="h-4 w-4" />
       </div>
@@ -122,11 +288,11 @@ export function AddNoteForm({
           onKeyDown={(e) => {
             if (e.key === "Enter" && !e.shiftKey) {
               e.preventDefault();
-              handleSubmit(e as any);
+              void submitNote();
             }
           }}
           className={cn(
-            "w-full bg-white dark:bg-surface-900 border rounded focus:ring-1 p-1 pr-24 text-sm resize-none focus:outline-none min-h-[32px] overflow-hidden leading-relaxed",
+            "w-full resize-none overflow-hidden rounded border bg-white p-1 pr-24 text-sm leading-relaxed text-surface-900 placeholder:text-surface-400 focus:outline-none focus:ring-1 dark:bg-surface-900 dark:text-surface-100 dark:placeholder:text-surface-500 min-h-[32px]",
             error ? "border-danger-500 focus:ring-danger-500" : "border-surface-200 focus:border-brand-500 focus:ring-brand-500"
           )}
           rows={1}
@@ -192,10 +358,35 @@ export function AddNoteForm({
             <X className="h-4 w-4" />
           </Button>
         )}
-        <Button type="submit" variant="ghost" size="sm" className="!p-1 text-brand-600 hover:text-brand-700 hover:bg-brand-50 dark:hover:bg-brand-900/30">
+        <Button
+          type={embedded ? "button" : "submit"}
+          variant="ghost"
+          size="sm"
+          className="!p-1 text-brand-600 hover:text-brand-700 hover:bg-brand-50 dark:hover:bg-brand-900/30"
+          onClick={embedded ? () => void submitNote() : undefined}
+        >
           <Plus className="h-4 w-4" />
         </Button>
       </div>
+      </NoteFormShell>
+  );
+}
+
+function NoteFormShell({
+  embedded,
+  className,
+  onSubmit,
+  children,
+}: {
+  embedded: boolean;
+  className: string;
+  onSubmit: (event: FormEvent) => void;
+  children: React.ReactNode;
+}) {
+  if (embedded) return <div className={className}>{children}</div>;
+  return (
+    <form onSubmit={onSubmit} className={className}>
+      {children}
     </form>
   );
 }

@@ -24,15 +24,9 @@ export interface ModalProps {
   showClose?: boolean;
   className?: string;
   headerActions?: ReactNode;
+  /** Kaydırılan gövdenin dışında, panel altına sabitlenen aksiyon alanı */
+  footer?: ReactNode;
 }
-
-const sizeClasses = {
-  sm: "max-w-sm",
-  md: "max-w-md",
-  lg: "max-w-lg",
-  xl: "max-w-xl",
-  "2xl": "max-w-2xl",
-} as const;
 
 export function Modal({
   isOpen,
@@ -44,6 +38,7 @@ export function Modal({
   showClose = true,
   className,
   headerActions,
+  footer,
 }: ModalProps) {
   const panelRef = useRef<HTMLDivElement>(null);
   const { isTop, zIndex } = useModalStack(isOpen);
@@ -81,7 +76,7 @@ export function Modal({
 
   return createPortal(
     <div
-      className="fixed inset-0 flex items-center justify-center p-4"
+      className="fixed inset-0 flex items-end justify-center md:items-center md:p-4"
       style={{ zIndex }}
     >
       {/* Overlay */}
@@ -92,7 +87,7 @@ export function Modal({
         aria-hidden="true"
       />
 
-      {/* Panel */}
+      {/* Panel — mobile bottom sheet, desktop centered dialog */}
       <div
         ref={panelRef}
         role="dialog"
@@ -101,16 +96,22 @@ export function Modal({
         aria-describedby={description ? "modal-desc" : undefined}
         tabIndex={-1}
         className={cn(
-          "relative w-full rounded-2xl border border-border bg-bg-card shadow-2xl animate-scale-in",
-          "dark:border-surface-700 dark:bg-surface-800",
-          "max-h-[90vh] flex flex-col",
-          sizeClasses[size],
+          "relative flex w-full min-h-0 max-h-[min(92dvh,100%)] flex-col overflow-hidden bg-white shadow-2xl",
+          "rounded-t-[24px] border-x-0 border-b-0 border-t border-border",
+          "md:max-h-[92vh] md:rounded-2xl md:border",
+          "dark:border-white/10 dark:bg-slate-950",
+          "animate-fade-in-up md:animate-scale-in",
+          size === "sm" && "md:max-w-sm",
+          size === "md" && "md:max-w-md",
+          size === "lg" && "md:max-w-lg",
+          size === "xl" && "md:max-w-xl",
+          size === "2xl" && "md:max-w-2xl",
           className,
         )}
       >
         {/* Header */}
         {(title || showClose || headerActions) && (
-          <div className="flex shrink-0 items-start justify-between border-b border-surface-100 px-6 py-4 dark:border-surface-700">
+          <div className="relative z-20 flex shrink-0 items-start justify-between border-b border-surface-100 px-6 py-4 dark:border-surface-700">
             <div>
               {title && (
                 <h2
@@ -146,7 +147,20 @@ export function Modal({
         )}
 
         {/* Scrollable body */}
-        <div className="flex-1 overflow-y-auto px-6 py-4">{children}</div>
+        <div
+          className={cn(
+            "min-h-0 flex-1 overflow-y-auto overscroll-contain px-6 py-4",
+            !footer && "pb-[max(1rem,env(safe-area-inset-bottom))]",
+          )}
+        >
+          {children}
+        </div>
+
+        {footer && (
+          <div className="relative z-30 shrink-0 border-t border-surface-200 bg-white px-6 pt-4 pb-[max(1rem,env(safe-area-inset-bottom))] dark:border-surface-700 dark:bg-surface-900">
+            {footer}
+          </div>
+        )}
       </div>
     </div>,
     document.body,

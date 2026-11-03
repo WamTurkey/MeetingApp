@@ -72,6 +72,6 @@ export function useModalStack(isOpen: boolean = true) {
   return {
     stackIndex,
     isTop: stackIndex === topIndex,
-    zIndex: 50 + (stackIndex % 10) * 10,
+    zIndex: 80 + (stackIndex % 10) * 10,
   };
 }

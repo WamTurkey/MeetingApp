@@ -213,11 +213,40 @@ export function useRemoveParticipant(meetingId: number) {
 
 // ─────────────────────────── Meetings (CRUD) ───────────────────────────
 
+export type CreateMeetingInput = CreateMeetingRequest & {
+  participants?: AddParticipantRequest[];
+  notes?: CreateNoteRequest[];
+};
+
 /** Yeni toplantı — detay önbelleğe yazılır, tüm toplantı listeleri (dashboard, takvim, planlı…) tazelenir. */
 export function useCreateMeeting() {
   const qc = useQueryClient();
   return useMutation({
-    mutationFn: (dto: CreateMeetingRequest) => createMeeting(dto),
+    mutationFn: async ({ participants = [], notes = [], ...dto }: CreateMeetingInput) => {
+      const created = await createMeeting(dto);
+      let next = created;
+      if (participants.length > 0) {
+        try {
+          const added = await Promise.all(participants.map((item) => addParticipant(created.id, item)));
+          next = { ...next, participants: [...next.participants, ...added] };
+        } catch (err) {
+          console.error("[CreateMeeting] Participants error:", err);
+          toast.error("Toplantı oluşturuldu, katılımcılar eklenemedi");
+        }
+      }
+      if (notes.length > 0) {
+        try {
+          const addedNotes = await Promise.all(
+            notes.map((note, index) => addNote(created.id, { ...note, displayOrder: note.displayOrder ?? index })),
+          );
+          next = { ...next, notes: [...next.notes, ...addedNotes] };
+        } catch (err) {
+          console.error("[CreateMeeting] Notes error:", err);
+          toast.error("Toplantı oluşturuldu, notlar eklenemedi");
+        }
+      }
+      return next;
+    },
     onSuccess: (created) => {
       qc.setQueryData(meetingKeys.detail(created.id), created);
       void invalidateAfter.meetingCreated(qc);

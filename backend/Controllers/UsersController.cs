@@ -23,9 +23,11 @@ public class UsersController : ControllerBase
     {
         var person = await _db.Persons
             .Where(p => p.LinkedUserId == u.Id)
-            .Select(p => new { p.Id, p.FullName })
+            .Select(p => new { p.Id, p.FullName, p.CompanyId, CompanyName = p.Company != null ? p.Company.Name : null })
             .FirstOrDefaultAsync();
-        return new UserDto(u.Id, u.Email, u.FullName, u.IsActive, u.IsSuperuser, u.Role, person?.Id, person?.FullName);
+        return new UserDto(
+            u.Id, u.Email, u.FullName, u.IsActive, u.IsSuperuser, u.Role,
+            person?.Id, person?.FullName, person?.CompanyId, person?.CompanyName);
     }
 
     /// <summary>Sistemde en az bir aktif Admin kalmasını garanti eder.</summary>
@@ -60,7 +62,13 @@ public class UsersController : ControllerBase
     {
         var links = await _db.Persons
             .Where(p => p.LinkedUserId != null)
-            .Select(p => new { p.Id, p.FullName, UserId = p.LinkedUserId!.Value })
+            .Select(p => new {
+                p.Id,
+                p.FullName,
+                p.CompanyId,
+                CompanyName = p.Company != null ? p.Company.Name : null,
+                UserId = p.LinkedUserId!.Value,
+            })
             .ToListAsync();
         var linkMap = links.GroupBy(l => l.UserId).ToDictionary(g => g.Key, g => g.First());
 
@@ -68,7 +76,9 @@ public class UsersController : ControllerBase
         return Ok(users.Select(u =>
         {
             linkMap.TryGetValue(u.Id, out var link);
-            return new UserDto(u.Id, u.Email, u.FullName, u.IsActive, u.IsSuperuser, u.Role, link?.Id, link?.FullName);
+            return new UserDto(
+                u.Id, u.Email, u.FullName, u.IsActive, u.IsSuperuser, u.Role,
+                link?.Id, link?.FullName, link?.CompanyId, link?.CompanyName);
         }).ToList());
     }
 

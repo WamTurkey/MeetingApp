@@ -188,6 +188,45 @@ using (var scope = app.Services.CreateScope())
         db.Database.ExecuteSqlRaw(@"
             IF NOT EXISTS (SELECT 1 FROM INFORMATION_SCHEMA.COLUMNS WHERE TABLE_NAME = 'Companies' AND COLUMN_NAME = 'FirmType')
             ALTER TABLE [dbo].[Companies] ADD [FirmType] NVARCHAR(20) NOT NULL DEFAULT 'EXTERNAL'");
+
+        db.Database.ExecuteSqlRaw(@"
+            IF NOT EXISTS (SELECT * FROM sys.tables WHERE name = 'ReminderLists' AND schema_id = SCHEMA_ID('dbo'))
+            CREATE TABLE [dbo].[ReminderLists] (
+                [Id] INT IDENTITY(1,1) PRIMARY KEY,
+                [Name] NVARCHAR(120) NOT NULL,
+                [Color] NVARCHAR(20) NOT NULL DEFAULT '#007AFF',
+                [Icon] NVARCHAR(40) NOT NULL DEFAULT 'list',
+                [IsDeleted] BIT NOT NULL DEFAULT 0,
+                [CreatedAt] DATETIME2 NOT NULL DEFAULT GETUTCDATE(),
+                [UpdatedAt] DATETIME2 NOT NULL DEFAULT GETUTCDATE(),
+                [CreatedBy] INT NOT NULL,
+                [UpdatedBy] INT NULL,
+                [DeletedAt] DATETIME2 NULL,
+                [DeletedBy] INT NULL
+            )");
+        db.Database.ExecuteSqlRaw(@"
+            IF NOT EXISTS (SELECT * FROM sys.columns WHERE object_id = OBJECT_ID('dbo.FollowupItems') AND name = 'ListId')
+            ALTER TABLE [dbo].[FollowupItems] ADD [ListId] INT NULL;
+            IF NOT EXISTS (SELECT * FROM sys.columns WHERE object_id = OBJECT_ID('dbo.FollowupItems') AND name = 'IsFlagged')
+            ALTER TABLE [dbo].[FollowupItems] ADD [IsFlagged] BIT NOT NULL DEFAULT 0;
+            IF NOT EXISTS (SELECT * FROM sys.columns WHERE object_id = OBJECT_ID('dbo.FollowupItems') AND name = 'IsUrgent')
+            ALTER TABLE [dbo].[FollowupItems] ADD [IsUrgent] BIT NOT NULL DEFAULT 0;
+            IF NOT EXISTS (SELECT * FROM sys.columns WHERE object_id = OBJECT_ID('dbo.FollowupItems') AND name = 'LinkedFollowupId')
+            ALTER TABLE [dbo].[FollowupItems] ADD [LinkedFollowupId] INT NULL;
+        ");
+        db.Database.ExecuteSqlRaw(@"
+            IF NOT EXISTS (SELECT * FROM sys.foreign_keys WHERE name = 'FK_FollowupItems_LinkedFollowup')
+              AND EXISTS (SELECT * FROM sys.columns WHERE object_id = OBJECT_ID('dbo.FollowupItems') AND name = 'LinkedFollowupId')
+            ALTER TABLE [dbo].[FollowupItems] ADD CONSTRAINT [FK_FollowupItems_LinkedFollowup]
+                FOREIGN KEY ([LinkedFollowupId]) REFERENCES [dbo].[FollowupItems]([Id]);
+        ");
+        db.Database.ExecuteSqlRaw(@"
+            IF NOT EXISTS (SELECT * FROM sys.foreign_keys WHERE name = 'FK_FollowupItems_ReminderLists')
+              AND EXISTS (SELECT * FROM sys.tables WHERE name = 'ReminderLists')
+              AND EXISTS (SELECT * FROM sys.columns WHERE object_id = OBJECT_ID('dbo.FollowupItems') AND name = 'ListId')
+            ALTER TABLE [dbo].[FollowupItems] ADD CONSTRAINT [FK_FollowupItems_ReminderLists]
+                FOREIGN KEY ([ListId]) REFERENCES [dbo].[ReminderLists]([Id]);
+        ");
     }
     catch (Exception ex) { Console.WriteLine($"[Migration] {ex.Message}"); }
 }

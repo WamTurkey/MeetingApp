@@ -19,12 +19,14 @@ import type { PersonDto, CompanyDto, TitleDto } from "@/types/api";
 interface PersonModalProps {
   isOpen: boolean;
   onClose: () => void;
-  onSaved: () => void;
+  onSaved: (person?: PersonDto) => void;
   editingPerson: PersonDto | null;
   companies: CompanyDto[];
+  /** Yeni kişi formunda başlangıç firması */
+  defaultCompanyId?: number | null;
 }
 
-export function PersonModal({ isOpen, onClose, onSaved, editingPerson, companies }: PersonModalProps) {
+export function PersonModal({ isOpen, onClose, onSaved, editingPerson, companies, defaultCompanyId }: PersonModalProps) {
   const isEdit = !!editingPerson;
   const { mutateAsync: createPerson } = useCreatePerson();
   const { mutateAsync: updatePerson } = useUpdatePerson();
@@ -61,11 +63,16 @@ export function PersonModal({ isOpen, onClose, onSaved, editingPerson, companies
       setIsActive(editingPerson.isActive);
       setLinkedUserId(editingPerson.linkedUserId ? String(editingPerson.linkedUserId) : "");
     } else if (isOpen) {
-      setFullName(""); setEmail(""); setTitleId(""); setPhone(""); setCompanyId(""); setIsActive(true);
+      setFullName("");
+      setEmail("");
+      setTitleId("");
+      setPhone("");
+      setCompanyId(defaultCompanyId ? String(defaultCompanyId) : "");
+      setIsActive(true);
       setLinkedUserId("");
     }
     setError("");
-  }, [isOpen, editingPerson, titles]);
+  }, [isOpen, editingPerson, titles, defaultCompanyId]);
 
   const companyOptions = useMemo(() => [
     { value: "", label: "Firma seçiniz (opsiyonel)" },
@@ -97,7 +104,7 @@ export function PersonModal({ isOpen, onClose, onSaved, editingPerson, companies
 
     try {
       if (isEdit && editingPerson) {
-        await updatePerson({ id: editingPerson.id, dto: {
+        const updated = await updatePerson({ id: editingPerson.id, dto: {
           fullName: fullName.trim(),
           email: email.trim() || undefined,
           title: selectedTitle || undefined,
@@ -106,8 +113,9 @@ export function PersonModal({ isOpen, onClose, onSaved, editingPerson, companies
           isActive,
           linkedUserId: linkedUserId ? Number(linkedUserId) : undefined,
         } });
+        onSaved(updated);
       } else {
-        await createPerson({
+        const created = await createPerson({
           fullName: fullName.trim(),
           email: email.trim() || undefined,
           title: selectedTitle || undefined,
@@ -115,8 +123,8 @@ export function PersonModal({ isOpen, onClose, onSaved, editingPerson, companies
           companyId: companyId ? Number(companyId) : undefined,
           linkedUserId: linkedUserId ? Number(linkedUserId) : undefined,
         });
+        onSaved(created);
       }
-      onSaved();
     } catch (err: any) {
       setError(err?.response?.data?.message || "Kayıt sırasında bir hata oluştu.");
     } finally {

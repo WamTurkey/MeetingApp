@@ -63,42 +63,47 @@ export function NoteRow({ note, editable = false, onUpdate, onEnter, className }
 
   const handleHasTerminChange = (checked: boolean) => {
     setHasTermin(checked);
-    if (!checked && editable && onUpdate) {
+    if (!editable || !onUpdate) return;
+    if (!checked) {
       setDueDate("");
       setPersonId("");
       onUpdate({ dueDate: undefined, responsiblePersonId: undefined });
+      return;
     }
+    const nextDate = dueDate || new Date().toISOString().slice(0, 10);
+    setDueDate(nextDate);
+    onUpdate({ dueDate: nextDate, actionStatus: "OPEN" });
   };
 
   const handleDateChange = (val: string) => {
     setDueDate(val);
-    if (editable && onUpdate) onUpdate({ dueDate: val || undefined });
+    if (editable && onUpdate) onUpdate({ dueDate: val || undefined, actionStatus: val ? "OPEN" : note.actionStatus });
   };
 
   const handlePersonChange = (val: string) => {
     setPersonId(val);
     if (editable && onUpdate) {
-      onUpdate({ responsiblePersonId: val ? Number(val) : undefined });
+      onUpdate({ responsiblePersonId: val ? Number(val) : undefined, actionStatus: val ? "OPEN" : note.actionStatus });
     }
   };
 
   return (
-    <div className={cn("flex w-full items-start gap-2 text-sm", className)}>
-      <div className="w-24 shrink-0 truncate text-xs text-surface-500 pt-1.5" title={note.createdByName}>
+    <div className={cn("flex w-full min-w-0 flex-col gap-2 text-sm md:flex-row md:items-start", className)}>
+      <div className="order-2 w-auto truncate pt-0 text-xs text-surface-500 md:order-1 md:w-24 md:shrink-0 md:pt-1.5" title={note.createdByName}>
         {note.createdByName}
       </div>
-      <div className="flex-1 min-w-[200px]">
+      <div className="order-1 min-w-0 flex-1 md:order-2">
         {editable ? (
           <textarea
             value={content}
             onChange={(e) => {
               setContent(e.target.value);
-              e.target.style.height = 'auto';
-              e.target.style.height = e.target.scrollHeight + 'px';
+              e.target.style.height = "auto";
+              e.target.style.height = e.target.scrollHeight + "px";
             }}
             onBlur={handleBlur}
             onKeyDown={handleKeyDown}
-            className="w-full bg-transparent border-0 focus:ring-0 p-1 text-sm resize-none focus:outline-none min-h-[32px] overflow-hidden leading-relaxed"
+            className="w-full min-h-[32px] resize-none overflow-hidden border-0 bg-transparent p-1 leading-relaxed focus:outline-none focus:ring-0"
             rows={1}
             placeholder="Karar / görev metni..."
           />
@@ -106,41 +111,43 @@ export function NoteRow({ note, editable = false, onUpdate, onEnter, className }
           <div className="p-1 whitespace-pre-wrap leading-relaxed">{content}</div>
         )}
       </div>
-      <div className="w-24 shrink-0 text-center text-xs text-surface-400 font-mono pt-1.5">
-        K-{note.id.toString().padStart(5, '0')}
-      </div>
-      <div className="w-28 shrink-0">
-        {editable ? (
-          <Select
-            value={type}
-            onChange={(e) => handleTypeChange(e.target.value)}
-            options={NOTE_TYPE_OPTIONS.filter(o => o.value !== "")}
-            className="h-8 text-xs !py-1 !px-2 bg-transparent border-transparent hover:border-surface-200"
-          />
-        ) : (
-          <div className="pt-1.5 text-surface-600">{NOTE_TYPE_OPTIONS.find(o => o.value === type)?.label || type}</div>
-        )}
-      </div>
-      <div className="w-64 shrink-0 flex items-start gap-2">
-        <label className="flex items-center gap-1.5 pt-2 cursor-pointer select-none">
-          <Checkbox checked={hasTermin} onChange={handleHasTerminChange} disabled={!editable} />
-          <span className="text-xs text-surface-600">Termin</span>
-        </label>
-        {hasTermin && (
-          <div className="flex flex-col gap-1 flex-1">
-            {editable ? (
-              <>
-                <Input type="date" value={dueDate} onChange={(e) => handleDateChange(e.target.value)} className="h-8 text-xs !py-1 !px-2" />
-                <Select options={RESPONSIBLE_OPTIONS} value={personId} onChange={(e) => handlePersonChange(e.target.value)} className="h-8 text-xs !py-1 !px-2" />
-              </>
-            ) : (
-              <div className="pt-1 text-xs text-surface-600 flex flex-col gap-1">
-                {dueDate && <span>{new Date(dueDate).toLocaleDateString('tr-TR')}</span>}
-                {note.responsiblePersonName && <span className="truncate" title={note.responsiblePersonName}>{note.responsiblePersonName}</span>}
-              </div>
-            )}
-          </div>
-        )}
+      <div className="order-2 flex min-w-0 flex-wrap items-center gap-x-3 gap-y-1 md:contents">
+        <div className="w-auto pt-0 text-center font-mono text-xs text-surface-400 md:w-24 md:shrink-0 md:pt-1.5">
+          K-{note.id.toString().padStart(5, "0")}
+        </div>
+        <div className="w-auto md:w-28 md:shrink-0">
+          {editable ? (
+            <Select
+              value={type}
+              onChange={(e) => handleTypeChange(e.target.value)}
+              options={NOTE_TYPE_OPTIONS.filter((o) => o.value !== "")}
+              className="h-8 text-xs !py-1 !px-2 bg-transparent border-transparent hover:border-surface-200"
+            />
+          ) : (
+            <div className="pt-0 text-surface-600 md:pt-1.5">{NOTE_TYPE_OPTIONS.find((o) => o.value === type)?.label || type}</div>
+          )}
+        </div>
+        <div className="flex w-full min-w-0 flex-col gap-1.5 md:w-56 md:shrink-0">
+          <label className="flex cursor-pointer select-none items-center gap-1.5">
+            <Checkbox checked={hasTermin} onChange={handleHasTerminChange} disabled={!editable} />
+            <span className="text-xs font-medium text-surface-600 dark:text-slate-200">Termin oluştur</span>
+          </label>
+          {hasTermin && (
+            <div className="grid grid-cols-1 gap-1">
+              {editable ? (
+                <>
+                  <Input type="date" value={dueDate} onChange={(e) => handleDateChange(e.target.value)} className="h-8 text-xs !py-1 !px-2" />
+                  <Select options={RESPONSIBLE_OPTIONS} value={personId} onChange={(e) => handlePersonChange(e.target.value)} className="h-8 text-xs !py-1 !px-2" />
+                </>
+              ) : (
+                <div className="flex flex-col gap-0.5 text-xs text-surface-600">
+                  {dueDate && <span>{new Date(dueDate).toLocaleDateString("tr-TR")}</span>}
+                  {note.responsiblePersonName && <span className="break-words" title={note.responsiblePersonName}>{note.responsiblePersonName}</span>}
+                </div>
+              )}
+            </div>
+          )}
+        </div>
       </div>
     </div>
   );

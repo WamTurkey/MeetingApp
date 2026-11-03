@@ -13,7 +13,7 @@ import type { Meeting, MeetingUpdatePayload } from "@/entities/meeting/model";
 
 export interface EditMeetingFormProps {
   meeting: Meeting;
-  onSubmit: (data: MeetingUpdatePayload) => void | Promise<void>;
+  onSubmit: (data: Partial<MeetingUpdatePayload>) => void | Promise<void>;
   onCancel?: () => void;
   isLoading?: boolean;
 }
@@ -71,7 +71,7 @@ export function EditMeetingForm({
     payload.nextMeetingAt = combinedNextIso || undefined;
     payload.nextMeetingNote = nextMeetingNote.trim() || undefined;
 
-    await onSubmit(payload as any);
+    await onSubmit(payload);
   }
 
   return (

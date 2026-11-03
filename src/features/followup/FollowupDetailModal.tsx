@@ -10,6 +10,8 @@ import {
   User,
   Building2,
   CalendarClock,
+  AlarmClock,
+  Flag,
   StickyNote,
   ArrowRight,
   Plus,
@@ -26,7 +28,14 @@ import { EditSaveToggleButton } from "@/shared/ui/EditSaveToggleButton";
 import { cn } from "@/shared/lib/cn";
 import { formatDate, formatDateTime } from "@/shared/lib/formatDate";
 import type { FollowupItem } from "@/entities/followup/model";
-import type { ActionStatus } from "@/shared/config/constants";
+import {
+  FOLLOWUP_PRIORITY_LABEL,
+  FOLLOWUP_PRIORITY_OPTIONS,
+  getFollowupPriority,
+  priorityToFlags,
+  type ActionStatus,
+  type FollowupPriority,
+} from "@/shared/config/constants";
 import { usePersons, useCompanies } from "@/entities/catalog/api/queries";
 import { useFollowups } from "@/entities/followup/api/queries";
 import { followupKeys } from "@/shared/api/queryKeys";
@@ -116,6 +125,7 @@ export function FollowupDetailModal({
   const [responsiblePersonId, setResponsiblePersonId] = useState<number | "">("");
   const [responsibleCompanyId, setResponsibleCompanyId] = useState<number | "">("");
   const [dependencyItemIds, setDependencyItemIds] = useState<number[]>([]);
+  const [priority, setPriority] = useState<FollowupPriority>("NORMAL");
 
   // Remote data — ortak React Query önbelleğinden (dropdown'lar katalog değişikliklerini anında yansıtır)
   const persons: PersonDto[] = usePersons().data ?? [];
@@ -129,6 +139,15 @@ export function FollowupDetailModal({
   const meetingTasks: FollowupItemDto[] = useMemo(
     () => (meetingTasksQuery.data ?? []).filter((t) => t.id !== item?.id),
     [meetingTasksQuery.data, item?.id],
+  );
+  const allFollowups = useFollowups({}, { enabled: isOpen }).data ?? [];
+  const linkedReminders = useMemo(
+    () => allFollowups.filter((entry) => item != null && entry.linkedFollowupId === item.id && entry.actionStatus !== "CANCELLED"),
+    [allFollowups, item],
+  );
+  const linkedTermin = useMemo(
+    () => (item?.linkedFollowupId == null ? undefined : allFollowups.find((entry) => entry.id === item.linkedFollowupId)),
+    [allFollowups, item?.linkedFollowupId],
   );
   // Değişiklik geçmişi — kayıt sonrası `useUpdateFollowup` bu anahtarı geçersiz kılar
   const changeLogs: ChangeLogEntry[] =
@@ -149,6 +168,7 @@ export function FollowupDetailModal({
       setResponsiblePersonId(item.responsiblePersonId ?? "");
       setResponsibleCompanyId(item.responsibleCompanyId ?? "");
       setDependencyItemIds(item.dependencyItemIds ?? []);
+      setPriority(getFollowupPriority(item));
       setIsEditing(false); // Reset to view mode initially
     }
     // Yalnızca farklı bir madde açıldığında veya madde sunucuda değiştiğinde (updatedAt) sıfırla.
@@ -187,6 +207,7 @@ export function FollowupDetailModal({
       responsiblePersonId: responsiblePersonId === "" ? null : Number(responsiblePersonId),
       responsibleCompanyId: responsibleCompanyId === "" ? null : Number(responsibleCompanyId),
       dependencyItemIds: dependencyItemIds,
+      ...priorityToFlags(priority),
     });
     } finally {
       setIsSaving(false);
@@ -225,16 +246,17 @@ export function FollowupDetailModal({
       size="xl" 
       title={`Takip konusu · K-${String(item.id).padStart(5, "0")}`}
       headerActions={headerActions}
+      className="h-[min(88dvh,100%)] md:h-[min(80vh,42rem)]"
     >
-      <div className="space-y-5">
+      <div className="flex min-h-full flex-col space-y-5">
         {/* Tabs */}
-        <div className="flex gap-1 border-b border-surface-200 dark:border-surface-700">
+        <div className="flex shrink-0 gap-1 border-b border-surface-200 dark:border-surface-700">
           {tabs.map((tab) => (
             <button
               key={tab.key}
               onClick={() => setActiveTab(tab.key)}
               className={cn(
-                "flex items-center gap-1.5 px-4 py-2.5 text-sm font-medium transition-all border-b-2 -mb-px",
+                "flex items-center gap-1.5 px-3 py-2.5 text-sm font-medium transition-all border-b-2 -mb-px sm:px-4",
                 activeTab === tab.key
                   ? "border-brand-600 text-brand-600 dark:text-brand-400"
                   : "border-transparent text-surface-500 hover:text-surface-700 dark:text-surface-400 dark:hover:text-surface-300"
@@ -246,7 +268,7 @@ export function FollowupDetailModal({
           ))}
         </div>
 
-        <div className="min-h-[520px]">
+        <div className="min-h-0 flex-1">
         {/* ──────────── Tab 1: Konu ve Durum ──────────── */}
         {activeTab === "subject" && (
           <div className="space-y-5 relative">
@@ -274,7 +296,45 @@ export function FollowupDetailModal({
               <p className="mt-2 text-xs text-surface-400">
                 Güncel durum ve gelişmeler burada tutulur. Kaynak tutanakların metni korunur.
               </p>
+              {linkedTermin && (
+                <p className="mt-3 text-xs text-surface-500">
+                  Bağlı termin: <span className="font-medium text-surface-800 dark:text-surface-100">{linkedTermin.text}</span>
+                </p>
+              )}
             </div>
+
+            {linkedReminders.length > 0 && (
+              <section className="space-y-2">
+                <h3 className="text-xs font-semibold uppercase tracking-wide text-surface-400">Anımsatıcı</h3>
+                {linkedReminders.map((reminder) => (
+                  <article
+                    key={reminder.id}
+                    className="rounded-lg border border-surface-200 bg-surface-50/50 p-3 dark:border-surface-700 dark:bg-surface-800/50"
+                  >
+                    <div className="flex items-start gap-2">
+                      <AlarmClock className="mt-0.5 h-4 w-4 shrink-0 text-blue-500" />
+                      <div className="min-w-0">
+                        <p className="text-sm font-medium text-surface-900 dark:text-surface-50">{reminder.text}</p>
+                        {reminder.developmentNote?.trim() && (
+                          <p className="mt-1 whitespace-pre-wrap text-sm text-surface-600 dark:text-surface-300">
+                            {reminder.developmentNote}
+                          </p>
+                        )}
+                        <p className="mt-2 text-xs text-surface-400">
+                          {[
+                            reminder.dueDate ? formatDate(reminder.dueDate, "short") : null,
+                            reminder.listName,
+                            FOLLOWUP_PRIORITY_LABEL[getFollowupPriority(reminder)],
+                          ]
+                            .filter(Boolean)
+                            .join(" · ") || "Tarih belirtilmedi"}
+                        </p>
+                      </div>
+                    </div>
+                  </article>
+                ))}
+              </section>
+            )}
 
             {/* Fields grid */}
             <div className="grid gap-4 sm:grid-cols-2">
@@ -382,6 +442,25 @@ export function FollowupDetailModal({
                   value={status}
                   onChange={(e) => setStatus(e.target.value as ActionStatus)}
                 />
+              )}
+
+              {isEditing ? (
+                <UISelect
+                  label="Öncelik"
+                  options={FOLLOWUP_PRIORITY_OPTIONS}
+                  value={priority}
+                  onChange={(event) => setPriority(event.target.value as FollowupPriority)}
+                />
+              ) : (
+                <div className="flex items-center gap-3 rounded-lg border border-surface-200 px-3 py-2.5 dark:border-surface-700 bg-surface-50 dark:bg-surface-800/50">
+                  <Flag className="h-4 w-4 text-orange-400" />
+                  <div>
+                    <p className="text-2xs font-medium uppercase tracking-wide text-surface-400">Öncelik</p>
+                    <p className="text-sm font-medium text-surface-900 dark:text-surface-50">
+                      {FOLLOWUP_PRIORITY_LABEL[priority]}
+                    </p>
+                  </div>
+                </div>
               )}
 
               {/* Tamamlanma Tarihi */}
@@ -520,7 +599,7 @@ export function FollowupDetailModal({
 
         {/* ──────────── Tab 2: Gelişme Geçmişi ──────────── */}
         {activeTab === "history" && (
-          <div className="space-y-1">
+          <div className="h-full space-y-1">
             {changeLogs.length > 0 ? (
               <div className="relative">
                 {/* Timeline line */}
@@ -562,6 +641,7 @@ export function FollowupDetailModal({
               </div>
             ) : (
               <EmptyState
+                className="h-full animate-none"
                 message="Henüz değişiklik kaydı yok"
                 description="Bu madde üzerinde yapılan güncellemeler burada listelenir."
                 icon={<History className="h-8 w-8" />}
@@ -572,7 +652,7 @@ export function FollowupDetailModal({
 
         {/* ──────────── Tab 3: İlişkili Tutanaklar ──────────── */}
         {activeTab === "minutes" && (
-          <div className="space-y-3">
+          <div className="h-full space-y-3">
             {item.sourceMeetingId ? (
               <Link
                 to={`/meetings/${item.sourceMeetingId}/minutes`}
@@ -595,6 +675,7 @@ export function FollowupDetailModal({
               </Link>
             ) : (
               <EmptyState
+                className="h-full animate-none"
                 message="İlişkili tutanak bulunamadı"
                 icon={<Link2 className="h-8 w-8" />}
               />

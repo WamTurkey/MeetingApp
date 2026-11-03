@@ -39,7 +39,8 @@ export function MultiPhotoCaptureField({
 
   const handleFiles = async (files: FileList | null) => {
     if (!files || files.length === 0) return;
-    const fileList = Array.from(files);
+    const fileList = Array.from(files).filter((file) => file.type.startsWith("image/"));
+    if (fileList.length === 0) return;
 
     if (onUpload) {
       setIsUploading(true);

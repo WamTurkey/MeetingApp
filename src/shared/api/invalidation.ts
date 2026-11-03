@@ -22,7 +22,7 @@
  * bir sonraki görüntülemede arka planda tazelenir. Sekmeler arası yayın `dataSync` tarafından yapılır.
  */
 import type { QueryClient, QueryKey } from "@tanstack/react-query";
-import { catalogKeys, followupKeys, meetingKeys, userKeys } from "./queryKeys";
+import { catalogKeys, followupKeys, meetingKeys, reminderListKeys, userKeys } from "./queryKeys";
 
 export type CatalogEntity = "persons" | "companies" | "projects" | "locations" | "categories" | "titles";
 
@@ -109,10 +109,14 @@ export const invalidateAfter = {
   followupChanged: (qc: QueryClient, item?: { id: number; sourceMeetingId?: number | null }) =>
     done([
       inv(qc, followupKeys.lists()),
+      inv(qc, reminderListKeys.lists()),
       ...(item ? [inv(qc, followupKeys.changelog(item.id))] : []),
       item?.sourceMeetingId ? inv(qc, meetingKeys.detail(item.sourceMeetingId)) : inv(qc, meetingKeys.details()),
       inv(qc, meetingKeys.lists()),
     ]),
+
+  reminderListsChanged: (qc: QueryClient) =>
+    done([inv(qc, reminderListKeys.lists()), inv(qc, followupKeys.lists())]),
 
   catalogChanged: (qc: QueryClient, entity: CatalogEntity) =>
     done([inv(qc, catalogKeyFor(entity)), ...CATALOG_DEPENDENTS[entity].map((k) => inv(qc, k))]),

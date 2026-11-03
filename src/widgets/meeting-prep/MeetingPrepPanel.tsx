@@ -48,7 +48,7 @@ export function MeetingPrepPanel({ meetingId, onRefresh }: MeetingPrepPanelProps
   };
 
   return (
-    <div className="rounded-xl border border-surface-200 bg-white dark:border-surface-700 dark:bg-surface-800">
+    <div className="min-w-0 max-w-full overflow-hidden rounded-xl border border-surface-200 bg-white dark:border-white/10 dark:bg-slate-950/80">
       <div className="flex items-center justify-between border-b border-surface-100 px-5 py-4 dark:border-surface-700">
         <div className="flex items-center gap-2">
           <FileCheck className="h-5 w-5 text-surface-400" />

@@ -79,14 +79,20 @@ const config: Config = {
         overlay: {
           DEFAULT: "rgb(var(--color-overlay) / <alpha-value>)",
         },
+        shell: {
+          from: "rgb(var(--shell-from) / <alpha-value>)",
+          to: "rgb(var(--shell-to) / <alpha-value>)",
+          fg: "rgb(var(--shell-fg) / <alpha-value>)",
+          muted: "rgb(var(--shell-fg-muted) / <alpha-value>)",
+        },
       },
       /* ── Tipografi ───────────────────────────────────── */
       fontFamily: {
         sans: [
+          "Segoe UI",
           "Inter",
           "system-ui",
           "-apple-system",
-          "Segoe UI",
           "Roboto",
           "sans-serif",
         ],

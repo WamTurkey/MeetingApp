@@ -26,11 +26,8 @@ export interface NavState {
 const ROUTE_LABELS: Record<string, string> = {
   "/": "Dashboard",
   "/meetings": "Toplantılar",
-  "/planned": "Planlı Toplantılar",
   "/calendar": "Takvim",
-  "/search": "Arama",
   "/followups": "Takip ve Terminler",
-  "/reports": "Raporlar",
 };
 
 function isNavFrom(value: unknown): value is NavFrom {

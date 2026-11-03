@@ -1,7 +1,8 @@
 namespace MeetingApp.API.DTOs;
 
 public record UserDto(int Id, string Email, string FullName, bool IsActive, bool IsSuperuser, string Role,
-    int? LinkedPersonId = null, string? LinkedPersonName = null);
+    int? LinkedPersonId = null, string? LinkedPersonName = null,
+    int? CompanyId = null, string? CompanyName = null);
 
 public record UserPreferenceDto(int Id, string PreferenceKey, string PreferenceValue);
 

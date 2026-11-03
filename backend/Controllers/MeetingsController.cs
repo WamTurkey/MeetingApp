@@ -59,13 +59,14 @@ public class MeetingsController : BaseApiController
                 m.MeetingDate.ToString("yyyy-MM-dd"),
                 m.PlannedStart.HasValue ? m.PlannedStart.Value.ToString("HH:mm") : null,
                 m.Status, m.StatusNavigation.DisplayName,
-                m.Project != null ? m.Project.Name : null,
+                m.ProjectId, m.Project != null ? m.Project.Name : null,
                 m.Company != null ? m.Company.Name : null,
-                m.Location != null ? m.Location.Name : null,
-                m.Category != null ? m.Category.Name : null,
+                m.LocationId, m.Location != null ? m.Location.Name : null,
+                m.CategoryId, m.Category != null ? m.Category.Name : null,
                 m.Participants.Count,
                 m.Notes.Count,
-                m.CreatedAt.ToString("yyyy-MM-ddTHH:mm:ss")))
+                m.CreatedAt.ToString("yyyy-MM-ddTHH:mm:ss"),
+                m.ParentLinks.Count + m.ChildLinks.Count))
             .ToListAsync();
 
         return Ok(new PagedResponse<MeetingListDto>(items, total, page, pageSize));
@@ -577,6 +578,7 @@ public class MeetingsController : BaseApiController
             .Include(x => x.ResponsiblePerson)
             .Include(x => x.ResponsibleCompany)
             .Include(x => x.ActionStatusNavigation)
+            .Include(x => x.List)
             .Include(x => x.DependentOn)
             .Where(x => x.SourceMeetingId != null && parentMeetingIds.Contains(x.SourceMeetingId.Value))
             .Where(x => x.ActionStatus != "COMPLETED" && x.ActionStatus != "CANCELLED" && x.ActionStatus != "ROLLED_OVER" && x.ActionStatus != "DONE")
@@ -589,6 +591,7 @@ public class MeetingsController : BaseApiController
             x.CompletedOn?.ToString("yyyy-MM-dd"), x.WaitingReason, x.DevelopmentNote,
             x.DependentOn.Select(d => d.DependsOnItemId).ToList(), x.SourceMeetingId, null,
             x.SourceNoteId, x.Version,
+            x.ListId, x.List?.Name, x.IsFlagged, x.IsUrgent, x.LinkedFollowupId,
             x.CreatedAt.ToString("yyyy-MM-ddTHH:mm:ss"), x.UpdatedAt.ToString("yyyy-MM-ddTHH:mm:ss")
         ));
 
@@ -637,6 +640,9 @@ public class MeetingsController : BaseApiController
                 SourceMeetingId = id,
                 SourceNoteId = newNote.Id,
                 RolledOverFromId = oldItem.Id,
+                ListId = oldItem.ListId,
+                IsFlagged = oldItem.IsFlagged,
+                IsUrgent = oldItem.IsUrgent,
                 CreatedBy = currentUserId,
                 CreatedAt = DateTime.UtcNow,
                 Version = 1
@@ -777,7 +783,7 @@ public class MeetingsController : BaseApiController
         // Satır 2: Toplantı Yeri
         ws.Cell(row, 1).Value = 1;
         ws.Cell(row, 1).Style.Alignment.SetHorizontal(XLAlignmentHorizontalValues.Center);
-        ws.Cell(row, 2).Value = "Toplantı Yeri";
+        ws.Cell(row, 2).Value = "Yer";
         ws.Cell(row, 3).Value = string.IsNullOrWhiteSpace(dto.LocationName) || dto.LocationName == "-" ? "" : dto.LocationName;
         ws.Range(row, 1, row, 3).Style.Fill.SetBackgroundColor(dataRowBg);
         ws.Row(row).Height = 20;
@@ -1098,7 +1104,7 @@ public class MeetingsController : BaseApiController
                     leftCol.Item().Background(dataBg).Padding(5).Row(r =>
                     {
                         r.ConstantItem(18).AlignCenter().Text("1").FontSize(9);
-                        r.RelativeItem().Text("Toplantı Yeri").FontSize(9);
+                        r.RelativeItem().Text("Yer").FontSize(9);
                     });
                     leftCol.Item().Background(dataBg).Padding(5).Row(r =>
                     {

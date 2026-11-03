@@ -45,6 +45,7 @@ public class MeetingDbContext : DbContext
     public DbSet<FollowupItem> FollowupItems => Set<FollowupItem>();
     public DbSet<FollowupItemDependency> FollowupItemDependencies => Set<FollowupItemDependency>();
     public DbSet<FollowupChangeLog> FollowupChangeLogs => Set<FollowupChangeLog>();
+    public DbSet<ReminderList> ReminderLists => Set<ReminderList>();
     public DbSet<Attachment> Attachments => Set<Attachment>();
 
     protected override void OnModelCreating(ModelBuilder modelBuilder)
@@ -315,6 +316,23 @@ public class MeetingDbContext : DbContext
             e.HasOne(x => x.RolledOverFrom).WithMany(f => f.RolledOverToItems).HasForeignKey(x => x.RolledOverFromId).OnDelete(DeleteBehavior.Restrict);
             e.HasOne(x => x.SourceMeeting).WithMany(m => m.SourceFollowups).HasForeignKey(x => x.SourceMeetingId).OnDelete(DeleteBehavior.Restrict);
             e.HasOne(x => x.SourceNote).WithMany(n => n.SourceFollowups).HasForeignKey(x => x.SourceNoteId).OnDelete(DeleteBehavior.Restrict);
+            e.HasOne(x => x.List).WithMany(l => l.Items).HasForeignKey(x => x.ListId).OnDelete(DeleteBehavior.SetNull);
+            e.HasOne(x => x.LinkedFollowup).WithMany(f => f.LinkedReminders).HasForeignKey(x => x.LinkedFollowupId).OnDelete(DeleteBehavior.NoAction);
+            e.HasOne(x => x.CreatedByUser).WithMany().HasForeignKey(x => x.CreatedBy).OnDelete(DeleteBehavior.Restrict);
+            e.HasOne(x => x.UpdatedByUser).WithMany().HasForeignKey(x => x.UpdatedBy).OnDelete(DeleteBehavior.Restrict);
+            e.HasOne(x => x.DeletedByUser).WithMany().HasForeignKey(x => x.DeletedBy).OnDelete(DeleteBehavior.Restrict);
+        });
+
+        // ── 4.5b ReminderLists ──
+        modelBuilder.Entity<ReminderList>(e =>
+        {
+            e.ToTable("ReminderLists");
+            e.HasKey(x => x.Id);
+            e.Property(x => x.Name).HasMaxLength(120);
+            e.Property(x => x.Color).HasMaxLength(20).HasDefaultValue("#007AFF");
+            e.Property(x => x.Icon).HasMaxLength(40).HasDefaultValue("list");
+            ConfigureAuditFields(e);
+            e.HasQueryFilter(x => !x.IsDeleted);
             e.HasOne(x => x.CreatedByUser).WithMany().HasForeignKey(x => x.CreatedBy).OnDelete(DeleteBehavior.Restrict);
             e.HasOne(x => x.UpdatedByUser).WithMany().HasForeignKey(x => x.UpdatedBy).OnDelete(DeleteBehavior.Restrict);
             e.HasOne(x => x.DeletedByUser).WithMany().HasForeignKey(x => x.DeletedBy).OnDelete(DeleteBehavior.Restrict);

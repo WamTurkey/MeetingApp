@@ -48,7 +48,7 @@ export function ParticipantsPanel({
   }
 
   return (
-    <div className="rounded-xl border border-surface-200 bg-white dark:border-surface-700 dark:bg-surface-800">
+    <div className="min-w-0 max-w-full overflow-hidden rounded-xl border border-surface-200 bg-white dark:border-white/10 dark:bg-slate-950/80">
       {/* Header */}
       <div className="flex items-center justify-between border-b border-surface-100 px-5 py-4 dark:border-surface-700">
         <div className="flex items-center gap-2">
@@ -115,59 +115,61 @@ export function ParticipantsPanel({
             {filteredParticipants.map((p) => (
               <div
                 key={p.id}
-                className="group flex items-start gap-3 rounded-lg px-3 py-3 transition-colors hover:bg-surface-50 dark:hover:bg-surface-700/50"
+                className="group flex items-start gap-3 rounded-lg px-3 py-3 transition-colors hover:bg-surface-50 dark:hover:bg-white/5"
               >
                 <ParticipantAvatar
                   name={p.personName}
                   avatarUrl={p.avatarUrl}
                   size="md"
                 />
-                <div className="flex-1 min-w-0">
-                  <p className="text-sm font-medium text-surface-900 truncate dark:text-surface-50">
-                    {p.personName}
-                  </p>
+                <div className="min-w-0 flex-1">
+                  <div className="flex flex-wrap items-start gap-2">
+                    <p className="min-w-0 flex-1 break-words text-sm font-medium text-surface-900 dark:text-white">
+                      {p.personName}
+                    </p>
+                    <Badge variant="default" size="sm">
+                      {PARTICIPANT_ROLE_LABEL[p.role]}
+                    </Badge>
+                  </div>
                   <div className="mt-0.5 space-y-0.5">
                     {p.title && (
-                      <p className="text-xs text-surface-500 dark:text-surface-400 truncate">
+                      <p className="break-words text-xs text-surface-500 dark:text-slate-300">
                         {p.title}{p.companyName ? ` · ${p.companyName}` : ""}
                       </p>
                     )}
                     {!p.title && p.companyName && (
-                      <p className="text-xs text-surface-500 dark:text-surface-400 truncate">
+                      <p className="break-words text-xs text-surface-500 dark:text-slate-300">
                         {p.companyName}
                       </p>
                     )}
                     {p.email && (
-                      <p className="text-xs text-surface-400 dark:text-surface-500 truncate flex items-center gap-1">
-                        <svg xmlns="http://www.w3.org/2000/svg" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><rect width="20" height="16" x="2" y="4" rx="2"/><path d="m22 7-8.97 5.7a1.94 1.94 0 0 1-2.06 0L2 7"/></svg>
+                      <p className="flex items-start gap-1 break-all text-xs text-surface-400 dark:text-slate-400">
+                        <svg xmlns="http://www.w3.org/2000/svg" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className="mt-0.5 shrink-0"><rect width="20" height="16" x="2" y="4" rx="2"/><path d="m22 7-8.97 5.7a1.94 1.94 0 0 1-2.06 0L2 7"/></svg>
                         {p.email}
                       </p>
                     )}
                     {p.phone && (
-                      <p className="text-xs text-surface-400 dark:text-surface-500 truncate flex items-center gap-1">
-                        <svg xmlns="http://www.w3.org/2000/svg" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M22 16.92v3a2 2 0 0 1-2.18 2 19.79 19.79 0 0 1-8.63-3.07 19.5 19.5 0 0 1-6-6 19.79 19.79 0 0 1-3.07-8.67A2 2 0 0 1 4.11 2h3a2 2 0 0 1 2 1.72 12.84 12.84 0 0 0 .7 2.81 2 2 0 0 1-.45 2.11L8.09 9.91a16 16 0 0 0 6 6l1.27-1.27a2 2 0 0 1 2.11-.45 12.84 12.84 0 0 0 2.81.7A2 2 0 0 1 22 16.92z"/></svg>
+                      <p className="flex items-center gap-1 break-all text-xs text-surface-400 dark:text-slate-400">
+                        <svg xmlns="http://www.w3.org/2000/svg" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className="shrink-0"><path d="M22 16.92v3a2 2 0 0 1-2.18 2 19.79 19.79 0 0 1-8.63-3.07 19.5 19.5 0 0 1-6-6 19.79 19.79 0 0 1-3.07-8.67A2 2 0 0 1 4.11 2h3a2 2 0 0 1 2 1.72 12.84 12.84 0 0 0 .7 2.81 2 2 0 0 1-.45 2.11L8.09 9.91a16 16 0 0 0 6 6l1.27-1.27a2 2 0 0 1 2.11-.45 12.84 12.84 0 0 0 2.81.7A2 2 0 0 1 22 16.92z"/></svg>
                         {p.phone}
                       </p>
                     )}
                   </div>
-                </div>
-                <Badge variant="default" size="sm">
-                  {PARTICIPANT_ROLE_LABEL[p.role]}
-                </Badge>
-                <div className="flex items-center gap-2 px-2">
-                  <input
-                    type="checkbox"
-                    className="h-4 w-4 rounded border-surface-300 text-brand-600 focus:ring-brand-500"
-                    checked={p.isAttended || false}
-                    disabled={!editable}
-                    onChange={(e) => onToggleAttendance?.(p.id, e.target.checked)}
-                  />
-                  <span className="text-xs text-surface-600 dark:text-surface-400">
-                    {p.isAttended ? "Katıldı" : "Katılmadı"}
-                  </span>
+                  <label className="mt-2 flex items-center gap-2">
+                    <input
+                      type="checkbox"
+                      className="h-4 w-4 rounded border-surface-300 text-brand-600 focus:ring-brand-500"
+                      checked={p.isAttended || false}
+                      disabled={!editable}
+                      onChange={(e) => onToggleAttendance?.(p.id, e.target.checked)}
+                    />
+                    <span className="text-xs text-surface-600 dark:text-slate-300">
+                      {p.isAttended ? "Katıldı" : "Katılmadı"}
+                    </span>
+                  </label>
                 </div>
                 {editable && onRemove && (
-                  <div className="opacity-0 transition-opacity group-hover:opacity-100">
+                  <div className="opacity-100 transition-opacity sm:opacity-0 sm:group-hover:opacity-100">
                     <RemoveParticipantButton
                       participant={p}
                       onRemove={onRemove}

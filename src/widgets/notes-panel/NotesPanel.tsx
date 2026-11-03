@@ -8,6 +8,9 @@ import { DeleteNoteButton } from "@/features/note/DeleteNoteButton";
 import type { Note, NoteCreatePayload } from "@/entities/note/model";
 import { DragDropContext, Droppable, Draggable, type DropResult } from "@hello-pangea/dnd";
 import { VoiceRecorderPanel } from "@/features/voice-note";
+import { SavedVoiceNotesPanel } from "@/widgets/voice-notes";
+import { Modal } from "@/shared/ui/Modal";
+import { useIsMobile } from "@/shared/hooks/useIsMobile";
 
 interface NotesPanelProps {
   notes: Note[];
@@ -32,6 +35,7 @@ export function NotesPanel({
   const [selectedIndex, setSelectedIndex] = useState<number | null>(null);
   const [showVoiceRecorder, setShowVoiceRecorder] = useState(false);
   const [draftNoteContent, setDraftNoteContent] = useState("");
+  const isMobile = useIsMobile();
 
   useEffect(() => {
     const handleKeyDown = (e: KeyboardEvent) => {
@@ -60,9 +64,10 @@ export function NotesPanel({
   async function handleAdd(data: NoteCreatePayload) {
     if (insertIndex !== null && insertIndex >= 0) {
       await onAddNote?.(data, insertIndex + 1);
-      setInsertIndex(insertIndex + 1);
+      setInsertIndex(isMobile ? null : insertIndex + 1);
     } else {
       await onAddNote?.(data);
+      if (isMobile) setInsertIndex(null);
     }
     setDraftNoteContent("");
   }
@@ -83,62 +88,28 @@ export function NotesPanel({
   }
 
   return (
-    <div className="rounded-xl border border-border bg-bg-card">
-      {/* Header */}
-      <div className="flex items-center justify-between border-b border-border-muted px-5 py-4">
-        <div className="flex items-center gap-2">
-          <StickyNote className="h-5 w-5 text-fg-muted" />
-          <h3 className="font-semibold text-fg">
-            Notlar
-          </h3>
+    <div className="min-w-0 max-w-full overflow-hidden rounded-xl border border-border bg-bg-card">
+      <div className="flex items-center justify-between gap-2 border-b border-border-muted px-4 py-3 md:px-5 md:py-4">
+        <div className="flex min-w-0 items-center gap-2">
+          <StickyNote className="h-5 w-5 shrink-0 text-fg-muted" />
+          <h3 className="font-semibold text-fg">Notlar</h3>
           <span className="rounded-full bg-bg-muted px-2 py-0.5 text-xs font-medium text-fg-secondary">
             {notes.length}
           </span>
         </div>
         {editable && (
-          <div className="flex items-center gap-2">
-            <Button
-              variant="outline"
-              size="sm"
-              className="border-rose-300 bg-rose-50/80 text-rose-700 hover:bg-rose-100 hover:border-rose-400 dark:border-rose-900/60 dark:bg-rose-950/40 dark:text-rose-300 font-medium shadow-xs"
-              icon={<Mic className="h-4 w-4 text-rose-600 dark:text-rose-400 animate-pulse" />}
-              onClick={() => setShowVoiceRecorder(!showVoiceRecorder)}
-            >
-              {showVoiceRecorder ? "Ses Kaydını Kapat" : "🎤 Sesle Not Yazdır"}
-            </Button>
-            <Button
-              variant="primary"
-              size="sm"
-              icon={<Plus className="h-3.5 w-3.5" />}
-              onClick={() => setInsertIndex(-1)}
-            >
-              Not Ekle
-            </Button>
-          </div>
+          <Button
+            variant="primary"
+            size="sm"
+            icon={<Plus className="h-3.5 w-3.5" />}
+            onClick={() => setInsertIndex(-1)}
+          >
+            Not Ekle
+          </Button>
         )}
       </div>
 
-      {/* Voice Recorder Panel */}
-      {showVoiceRecorder && (
-        <div className="p-4 border-b border-border-muted bg-surface-50/50 dark:bg-surface-900/30">
-          <VoiceRecorderPanel
-            meetingId={meetingId}
-            onTransferText={(text) => {
-              setDraftNoteContent(text);
-              setInsertIndex(-1);
-            }}
-            onSaveAsNote={async (text) => {
-              await onAddNote?.({ content: text, noteType: "NOTE" });
-            }}
-            onClose={() => setShowVoiceRecorder(false)}
-          />
-        </div>
-      )}
-
-      {/* Note list and Add Form Container */}
       <div className="p-0">
-
-
         {notes.length === 0 ? (
           <div className="flex flex-col">
             <div className="p-4">
@@ -148,7 +119,7 @@ export function NotesPanel({
                 icon={<StickyNote className="h-8 w-8" />}
               />
             </div>
-            {editable && insertIndex === -1 && (
+            {editable && !isMobile && insertIndex === -1 && (
               <div className="w-full">
                 <AddNoteForm
                   meetingId={meetingId}
@@ -163,11 +134,11 @@ export function NotesPanel({
             )}
           </div>
         ) : (
-          <div className="w-full">
-            <div className="flex items-center gap-2 bg-surface-100 dark:bg-surface-800/50 border-b border-surface-200 dark:border-surface-700 px-3 py-2 text-xs font-semibold text-surface-500 uppercase tracking-wider">
+          <div className="w-full min-w-0">
+            <div className="hidden items-center gap-2 border-b border-surface-200 bg-surface-100 px-3 py-2 text-xs font-semibold uppercase tracking-wider text-surface-500 md:flex dark:border-surface-700 dark:bg-surface-800/50">
               {editable && <div className="w-6 shrink-0" />}
               <div className="w-24 shrink-0">Ekleyen</div>
-              <div className="flex-1 min-w-[200px]">Karar / Görev metni</div>
+              <div className="min-w-0 flex-1">Karar / Görev metni</div>
               <div className="w-24 shrink-0 text-center">ID</div>
               <div className="w-28 shrink-0">Tür</div>
               <div className="w-64 shrink-0">Termin & Sorumlu</div>
@@ -210,7 +181,7 @@ export function NotesPanel({
                                   <GripVertical className="h-4 w-4" />
                                 </div>
                               )}
-                              <div className="flex-1 flex gap-2">
+                              <div className="min-w-0 flex-1">
                                 <NoteRow 
                                   note={note} 
                                   editable={editable}
@@ -219,7 +190,7 @@ export function NotesPanel({
                                 />
                               </div>
                               {editable && onDeleteNote && (
-                                <div className="w-8 shrink-0 pt-1 opacity-0 transition-opacity group-hover:opacity-100 flex justify-end">
+                                <div className="w-8 shrink-0 pt-1 flex justify-end opacity-100 transition-opacity sm:opacity-0 sm:group-hover:opacity-100">
                                   <DeleteNoteButton
                                     note={note}
                                     onDelete={onDeleteNote}
@@ -228,7 +199,7 @@ export function NotesPanel({
                               )}
                             </div>
                             
-                            {insertIndex === index && (
+                            {!isMobile && insertIndex === index && (
                               <div className="w-full">
                                 <AddNoteForm
                                   meetingId={meetingId}
@@ -248,7 +219,7 @@ export function NotesPanel({
             </DragDropContext>
             
             {/* Add Note Section (Bottom / Default) */}
-            {editable && insertIndex === -1 && (
+            {editable && !isMobile && insertIndex === -1 && (
               <div className="w-full">
                 <AddNoteForm
                   meetingId={meetingId}
@@ -265,6 +236,65 @@ export function NotesPanel({
         )}
 
       </div>
+
+      <div className="space-y-3 border-t border-border-muted px-4 py-3">
+        {editable && (
+          <>
+            <button
+              type="button"
+              onClick={() => setShowVoiceRecorder((open) => !open)}
+              className="flex items-center gap-2 text-left text-sm text-surface-600 dark:text-slate-200"
+            >
+              <Mic className="h-4 w-4 shrink-0 text-rose-500" />
+              Sesli notu dikte edebilirsiniz
+            </button>
+            {showVoiceRecorder && (
+              <VoiceRecorderPanel
+                meetingId={meetingId}
+                onTransferText={(text) => {
+                  setDraftNoteContent(text);
+                  setInsertIndex(-1);
+                }}
+                onSaveAsNote={async (text) => {
+                  await onAddNote?.({ content: text, noteType: "NOTE" });
+                }}
+                onClose={() => setShowVoiceRecorder(false)}
+              />
+            )}
+          </>
+        )}
+        <SavedVoiceNotesPanel
+          meetingId={meetingId}
+          editable={editable}
+          embedded
+          onAddToNotes={async (text) => {
+            await onAddNote?.({ content: text, noteType: "NOTE" });
+          }}
+        />
+      </div>
+
+      {isMobile && insertIndex !== null && (
+        <Modal
+          isOpen
+          onClose={() => {
+            setInsertIndex(null);
+            setDraftNoteContent("");
+          }}
+          title="Not Ekle"
+          size="md"
+        >
+          <AddNoteForm
+            meetingId={meetingId}
+            layout="stacked"
+            initialContent={draftNoteContent}
+            onSubmit={handleAdd}
+            onCancel={() => {
+              setInsertIndex(null);
+              setDraftNoteContent("");
+            }}
+          />
+        </Modal>
+      )}
     </div>
   );
 }

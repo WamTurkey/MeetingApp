@@ -36,6 +36,11 @@ export const followupKeys = {
   changelog: (id: number) => [...followupKeys.all, "changelog", id] as const,
 };
 
+export const reminderListKeys = {
+  all: ["reminder-lists"] as const,
+  lists: () => [...reminderListKeys.all, "list"] as const,
+};
+
 export const catalogKeys = {
   all: ["catalog"] as const,
   persons: () => [...catalogKeys.all, "persons"] as const,

@@ -23,8 +23,8 @@ export function Card({ children, className, hoverable = false, onClick }: CardPr
         }
       }}
       className={cn(
-        "rounded-xl border border-surface-200 bg-bg-card shadow-card",
-        hoverable && "cursor-pointer transition-all duration-200 hover:shadow-elevated hover:-translate-y-0.5",
+        "rounded-3xl border border-white/40 bg-white/90 shadow-elevated backdrop-blur-xl dark:border-white/10 dark:bg-slate-950/80 dark:text-white",
+        hoverable && "cursor-pointer transition-all duration-200 hover:shadow-modal hover:-translate-y-1",
         onClick && "cursor-pointer",
         className,
       )}

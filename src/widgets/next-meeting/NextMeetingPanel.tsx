@@ -5,13 +5,19 @@ import { Input } from "@/shared/ui/Input";
 import { Textarea } from "@/shared/ui/Textarea";
 import { SpeechToTextButton } from "@/features/voice-note";
 import { formatDateTime } from "@/shared/lib/formatDate";
+import { istanbulWallTime, scheduleLocalReminder } from "@/shared/lib/localReminders";
 import type { Meeting } from "@/entities/meeting/model";
 import { Link } from "react-router-dom";
+
+export interface NextMeetingPatch {
+  nextMeetingAt?: string;
+  nextMeetingNote?: string;
+}
 
 interface NextMeetingPanelProps {
   meeting: Meeting;
   editable?: boolean;
-  onUpdateMeeting?: (data: any) => Promise<void> | void;
+  onUpdateMeeting?: (data: NextMeetingPatch) => Promise<void> | void;
 }
 
 export function NextMeetingPanel({
@@ -21,19 +27,18 @@ export function NextMeetingPanel({
 }: NextMeetingPanelProps) {
   const [isEditing, setIsEditing] = useState(false);
   const [nextDate, setNextDate] = useState(
-    meeting.nextMeetingAt ? meeting.nextMeetingAt.split("T")[0] : ""
+    meeting.nextMeetingAt ? meeting.nextMeetingAt.split("T")[0] : "",
   );
   const [nextTime, setNextTime] = useState(
     meeting.nextMeetingAt && meeting.nextMeetingAt.includes("T")
       ? meeting.nextMeetingAt.split("T")[1]?.slice(0, 5) ?? ""
-      : ""
+      : "",
   );
   const [nextNote, setNextNote] = useState(meeting.nextMeetingNote ?? "");
   const [isSaving, setIsSaving] = useState(false);
 
-  // Check if there are linked follow-up meetings
-  const followUpMeetings = (meeting.linkedMeetings || []).filter(
-    (m: any) => m.relationType === "FOLLOW_UP" || m.relationType === "PARENT"
+  const followUpMeetings = (meeting.linkedMeetings ?? []).filter(
+    (m) => m.relationType === "FOLLOW_UP" || m.relationType === "PARENT" || m.relationType === "CONTINUATION",
   );
 
   async function handleSave() {
@@ -44,10 +49,18 @@ export function NextMeetingPanel({
         combinedIso = nextTime ? `${nextDate}T${nextTime}:00` : `${nextDate}T09:00:00`;
       }
       await onUpdateMeeting?.({
-        ...meeting,
-        nextMeetingAt: combinedIso || null,
-        nextMeetingNote: nextNote.trim() || null,
+        nextMeetingAt: combinedIso,
+        nextMeetingNote: nextNote.trim() || undefined,
       });
+      if (combinedIso) {
+        const fireAt = new Date(istanbulWallTime(combinedIso.slice(0, 10), nextTime || "09:00").getTime() - 15 * 60 * 1000);
+        scheduleLocalReminder({
+          key: `next:${meeting.id}:${combinedIso}`,
+          title: "Sonraki toplantı hatırlatması",
+          body: meeting.title,
+          fireAt,
+        });
+      }
       setIsEditing(false);
     } catch (err) {
       console.error("Save next meeting error:", err);
@@ -61,15 +74,14 @@ export function NextMeetingPanel({
     setNextTime(
       meeting.nextMeetingAt && meeting.nextMeetingAt.includes("T")
         ? meeting.nextMeetingAt.split("T")[1]?.slice(0, 5) ?? ""
-        : ""
+        : "",
     );
     setNextNote(meeting.nextMeetingNote ?? "");
     setIsEditing(false);
   }
 
   return (
-    <div className="rounded-xl border border-border bg-bg-card shadow-sm">
-      {/* Header */}
+    <div className="min-w-0 max-w-full overflow-hidden rounded-xl border border-border bg-bg-card shadow-sm dark:border-white/10 dark:bg-slate-950/80">
       <div className="flex items-center justify-between border-b border-border-muted px-5 py-4">
         <div className="flex items-center gap-2">
           <Calendar className="h-5 w-5 text-brand-600 dark:text-brand-400" />
@@ -93,7 +105,6 @@ export function NextMeetingPanel({
       </div>
 
       <div className="p-5 space-y-6">
-        {/* Editing Form */}
         {isEditing ? (
           <div className="rounded-lg border-2 border-brand-300 bg-brand-50/20 p-5 dark:border-brand-800 dark:bg-brand-950/20">
             <h4 className="text-sm font-semibold text-brand-900 dark:text-brand-200 mb-4 flex items-center gap-2">
@@ -157,10 +168,8 @@ export function NextMeetingPanel({
             </div>
           </div>
         ) : (
-          /* View Mode */
           <div className="space-y-4">
             <div className="grid gap-4 sm:grid-cols-2">
-              {/* Date Card */}
               <div className="flex items-start gap-3.5 rounded-lg border border-border bg-surface-50/50 p-4 dark:bg-surface-900/30">
                 <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-lg bg-brand-100 text-brand-600 dark:bg-brand-950 dark:text-brand-400">
                   <Calendar className="h-5 w-5" />
@@ -177,7 +186,6 @@ export function NextMeetingPanel({
                 </div>
               </div>
 
-              {/* Status / Agenda Note Card */}
               <div className="flex items-start gap-3.5 rounded-lg border border-border bg-surface-50/50 p-4 dark:bg-surface-900/30">
                 <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-lg bg-surface-200 text-surface-600 dark:bg-surface-800 dark:text-surface-300">
                   <FileText className="h-5 w-5" />
@@ -193,27 +201,26 @@ export function NextMeetingPanel({
               </div>
             </div>
 
-            {/* Linked meetings section if exists */}
             {followUpMeetings.length > 0 && (
-              <div className="rounded-lg border border-border bg-white p-4 dark:bg-surface-800">
+              <div className="rounded-lg border border-border bg-white p-4 dark:border-white/10 dark:bg-slate-950/80">
                 <h4 className="text-xs font-semibold uppercase tracking-wider text-surface-400 mb-3">
                   Sistemde Bağlantılı Toplantılar
                 </h4>
                 <div className="space-y-2">
-                  {followUpMeetings.map((lm: any) => (
+                  {followUpMeetings.map((lm) => (
                     <div
                       key={lm.id}
                       className="flex items-center justify-between rounded-lg border border-border-muted p-3 hover:bg-surface-50 dark:hover:bg-surface-750"
                     >
                       <div>
                         <p className="text-sm font-medium text-surface-900 dark:text-surface-100">
-                          {lm.targetMeetingTitle || "Bağlı Toplantı"}
+                          {lm.linkedMeetingTitle || "Bağlı Toplantı"}
                         </p>
                         <p className="text-xs text-surface-500">
                           İlişki: {lm.relationTypeDisplay || lm.relationType}
                         </p>
                       </div>
-                      <Link to={`/meetings/${lm.targetMeetingId || lm.id}`}>
+                      <Link to={`/meetings/${lm.linkedMeetingId}`}>
                         <Button
                           size="sm"
                           variant="outline"

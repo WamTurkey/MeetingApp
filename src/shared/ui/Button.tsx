@@ -6,7 +6,7 @@ import { cn } from "@/shared/lib/cn";
 
 const variants = {
   primary:
-    "bg-brand-600 text-white hover:bg-brand-700 active:bg-brand-800 focus-visible:ring-brand-500 shadow-sm",
+    "bg-blue-600 text-white hover:bg-blue-500 active:bg-blue-700 focus-visible:ring-blue-400 shadow-[0_8px_24px_rgba(37,99,235,0.28)] dark:bg-blue-400 dark:text-slate-950 dark:hover:bg-blue-300 dark:active:bg-blue-500",
   secondary:
     "bg-bg-muted text-fg-secondary hover:bg-surface-200 active:bg-surface-300 focus-visible:ring-surface-400 shadow-sm dark:hover:bg-surface-700 dark:active:bg-surface-600",
   danger:
@@ -62,6 +62,7 @@ export const Button = forwardRef<HTMLButtonElement, ButtonProps>(
           "disabled:pointer-events-none disabled:opacity-50",
           variants[variant],
           sizes[size],
+          variant === "primary" && "rounded-full",
           className,
         )}
         {...props}

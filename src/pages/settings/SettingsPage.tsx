@@ -22,8 +22,8 @@ export function SettingsPage() {
   return (
     <div className="space-y-6">
       <div>
-        <h1 className="text-2xl font-bold text-surface-900 dark:text-surface-50">Ayarlar</h1>
-        <p className="mt-1 text-sm text-surface-500 dark:text-surface-400">Uygulama, yedekleme ve genel yapılandırma ayarları.</p>
+        <h1 className="text-2xl font-bold text-shell-fg">Ayarlar</h1>
+        <p className="mt-1 text-sm text-shell-muted">Uygulama, yedekleme ve genel yapılandırma ayarları.</p>
       </div>
 
       <div className="grid gap-4 lg:grid-cols-2">

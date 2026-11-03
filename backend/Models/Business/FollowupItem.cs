@@ -21,6 +21,10 @@ public class FollowupItem : AuditableEntity
     public int DisplayOrder { get; set; }
     public int Version { get; set; }
     public int? RolledOverFromId { get; set; }
+    public int? ListId { get; set; }
+    public int? LinkedFollowupId { get; set; }
+    public bool IsFlagged { get; set; }
+    public bool IsUrgent { get; set; }
 
     // Navigation — Audit
     public User CreatedByUser { get; set; } = null!;
@@ -34,10 +38,13 @@ public class FollowupItem : AuditableEntity
     public Meeting? SourceMeeting { get; set; }
     public Note? SourceNote { get; set; }
     public FollowupItem? RolledOverFrom { get; set; }
+    public ReminderList? List { get; set; }
+    public FollowupItem? LinkedFollowup { get; set; }
 
     // Navigation — Children
     public ICollection<FollowupChangeLog> ChangeLogs { get; set; } = new List<FollowupChangeLog>();
     public ICollection<FollowupItem> RolledOverToItems { get; set; } = new List<FollowupItem>();
+    public ICollection<FollowupItem> LinkedReminders { get; set; } = new List<FollowupItem>();
     
     // Dependencies
     public ICollection<FollowupItemDependency> DependentOn { get; set; } = new List<FollowupItemDependency>();

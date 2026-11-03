@@ -190,15 +190,22 @@ export interface MeetingListItem {
   title: string;
   meetingDate: string;
   plannedStart: string | null;
+  subject?: string | null;
+  description?: string | null;
   status: string;
   statusDisplay: string;
+  projectId?: number | null;
   projectName: string | null;
   companyName: string | null;
+  locationId?: number | null;
   locationName: string | null;
+  categoryId?: number | null;
   categoryName: string | null;
   participantCount: number;
   noteCount: number;
   createdAt: string;
+  /** PARENT + CHILD bağlantı sayısı; >0 ise toplantı bir zincirde */
+  linkCount?: number;
 }
 
 export interface MeetingDetail {
@@ -350,6 +357,11 @@ export interface FollowupItemDto {
   sourceMeetingTitle: string | null;
   sourceNoteId: number | null;
   version: number;
+  listId: number | null;
+  listName: string | null;
+  isFlagged: boolean;
+  isUrgent: boolean;
+  linkedFollowupId: number | null;
   createdAt: string;
   updatedAt: string;
 }
@@ -360,11 +372,16 @@ export interface CreateFollowupRequest {
   responsiblePersonId?: number;
   responsibleCompanyId?: number;
   dueDate?: string;
+  actionStatus?: string;
   waitingReason?: string;
   developmentNote?: string;
   dependencyItemIds?: number[];
   sourceMeetingId?: number;
   sourceNoteId?: number;
+  listId?: number;
+  isFlagged?: boolean;
+  isUrgent?: boolean;
+  linkedFollowupId?: number | null;
 }
 
 export interface UpdateFollowupRequest {
@@ -378,6 +395,30 @@ export interface UpdateFollowupRequest {
   waitingReason?: string;
   developmentNote?: string;
   dependencyItemIds?: number[];
+  listId?: number | null;
+  isFlagged?: boolean;
+  isUrgent?: boolean;
+  linkedFollowupId?: number | null;
+}
+
+export interface ReminderListDto {
+  id: number;
+  name: string;
+  color: string;
+  icon: string;
+  itemCount: number;
+}
+
+export interface CreateReminderListRequest {
+  name: string;
+  color?: string;
+  icon?: string;
+}
+
+export interface UpdateReminderListRequest {
+  name: string;
+  color: string;
+  icon: string;
 }
 
 // ──────────── Followup Change Log ────────────
@@ -408,4 +449,5 @@ export interface AttachmentDto {
   description: string | null;
   uploadedByName: string;
   createdAt: string;
+  url?: string;
 }

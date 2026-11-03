@@ -14,9 +14,9 @@ export function MeetingAttachmentsPanel({
   const uploadMutation = useUploadAttachment(meetingId);
   const deleteMutation = useDeleteAttachment(meetingId);
 
-  // 2 ayrı başlık altında ayrıştırılmış görseller
-  const businessCards = allAttachments.filter((a) => a.category === "BUSINESS_CARD");
-  const meetingPhotos = allAttachments.filter((a) => a.category === "MEETING_PHOTO");
+  const isImage = (a: typeof allAttachments[number]) => a.mimeType.startsWith("image/");
+  const businessCards = allAttachments.filter((a) => a.category === "BUSINESS_CARD" && isImage(a));
+  const meetingPhotos = allAttachments.filter((a) => a.category === "MEETING_PHOTO" && isImage(a));
 
   const handleUploadBusinessCard = async (file: File) => {
     await uploadMutation.mutateAsync({
@@ -37,11 +37,11 @@ export function MeetingAttachmentsPanel({
   };
 
   return (
-    <div className="space-y-6">
+    <div className="min-w-0 max-w-full space-y-6">
       {/* 1. Başlık: Kartvizit */}
       <MultiPhotoCaptureField
         category="BUSINESS_CARD"
-        title="Kartvizit"
+        title="Kartvizit Görselleri"
         description="Toplantı katılımcılarına ait kartvizit fotoğrafları veya kartvizit taramaları."
         attachments={businessCards}
         isLoading={isLoading}

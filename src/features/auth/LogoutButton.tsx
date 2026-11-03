@@ -13,12 +13,14 @@ export interface LogoutButtonProps {
   isLoading?: boolean;
   /** Compact mode hides the label text, shows only icon. */
   compact?: boolean;
+  className?: string;
 }
 
 export function LogoutButton({
   onLogout,
   isLoading = false,
   compact = false,
+  className,
 }: LogoutButtonProps) {
   return (
     <Button
@@ -27,6 +29,7 @@ export function LogoutButton({
       onClick={onLogout}
       isLoading={isLoading}
       icon={<LogOut className="h-4 w-4" />}
+      className={className}
       aria-label="Çıkış Yap"
     >
       {!compact && "Çıkış Yap"}

@@ -9,6 +9,8 @@ export interface UserListDto {
   role: string;
   linkedPersonId?: number | null;
   linkedPersonName?: string | null;
+  companyId?: number | null;
+  companyName?: string | null;
 }
 
 export async function fetchUsers(): Promise<UserListDto[]> {

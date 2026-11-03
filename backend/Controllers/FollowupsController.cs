@@ -25,6 +25,7 @@ public class FollowupsController : BaseApiController
             .Include(f => f.ResponsibleCompany)
             .Include(f => f.ActionStatusNavigation)
             .Include(f => f.SourceMeeting)
+            .Include(f => f.List)
             .Include(f => f.DependentOn)
             .AsQueryable();
 
@@ -49,6 +50,8 @@ public class FollowupsController : BaseApiController
                 f.DependentOn.Select(d => d.DependsOnItemId).ToList(), f.SourceMeetingId,
                 f.SourceMeeting != null ? f.SourceMeeting.Title : null,
                 f.SourceNoteId, f.Version,
+                f.ListId, f.List != null ? f.List.Name : null,
+                f.IsFlagged, f.IsUrgent, f.LinkedFollowupId,
                 f.CreatedAt.ToString("yyyy-MM-ddTHH:mm:ss"),
                 f.UpdatedAt.ToString("yyyy-MM-ddTHH:mm:ss")))
             .ToListAsync();
@@ -64,6 +67,7 @@ public class FollowupsController : BaseApiController
             .Include(x => x.ResponsibleCompany)
             .Include(x => x.ActionStatusNavigation)
             .Include(x => x.SourceMeeting)
+            .Include(x => x.List)
             .Include(x => x.DependentOn)
             .FirstOrDefaultAsync(x => x.Id == id);
         if (f == null) return NotFound();
@@ -78,6 +82,7 @@ public class FollowupsController : BaseApiController
             f.WaitingReason, f.DevelopmentNote,
             f.DependentOn.Select(d => d.DependsOnItemId).ToList(), f.SourceMeetingId, f.SourceMeeting?.Title,
             f.SourceNoteId, f.Version,
+            f.ListId, f.List?.Name, f.IsFlagged, f.IsUrgent, f.LinkedFollowupId,
             f.CreatedAt.ToString("yyyy-MM-ddTHH:mm:ss"),
             f.UpdatedAt.ToString("yyyy-MM-ddTHH:mm:ss")));
     }
@@ -93,9 +98,13 @@ public class FollowupsController : BaseApiController
             DueDate = !string.IsNullOrEmpty(dto.DueDate) ? DateOnly.Parse(dto.DueDate) : null,
             WaitingReason = dto.WaitingReason, DevelopmentNote = dto.DevelopmentNote,
             SourceMeetingId = dto.SourceMeetingId, SourceNoteId = dto.SourceNoteId,
+            ListId = dto.ListId, IsFlagged = dto.IsFlagged, IsUrgent = dto.IsUrgent,
+            LinkedFollowupId = dto.LinkedFollowupId,
             ActionStatus = NoteFollowupSync.NormalizeStatus(dto.ActionStatus),
             CreatedBy = CurrentUserId
         };
+        if (item.LinkedFollowupId.HasValue && !await _db.FollowupItems.AnyAsync(x => x.Id == item.LinkedFollowupId.Value))
+            return BadRequest(new { message = "Bağlanacak termin bulunamadı." });
         _db.FollowupItems.Add(item);
         await _db.SaveChangesAsync(); // Id atanması için önce kaydet
 
@@ -198,6 +207,15 @@ public class FollowupsController : BaseApiController
         f.CompletedOn = !string.IsNullOrEmpty(dto.CompletedOn) ? DateOnly.Parse(dto.CompletedOn) : null;
         f.WaitingReason = dto.WaitingReason;
         f.DevelopmentNote = dto.DevelopmentNote;
+        var nextLink = dto.LinkedFollowupId == id ? null : dto.LinkedFollowupId;
+        if (nextLink.HasValue && !await _db.FollowupItems.AnyAsync(x => x.Id == nextLink.Value))
+            return BadRequest(new { message = "Bağlanacak termin bulunamadı." });
+        LogChange("LinkedFollowup", f.LinkedFollowupId?.ToString(), nextLink?.ToString(), "Anımsatıcı bağlantısı güncellendi");
+
+        f.ListId = dto.ListId;
+        f.IsFlagged = dto.IsFlagged;
+        f.IsUrgent = dto.IsUrgent;
+        f.LinkedFollowupId = nextLink;
         
         // Update dependencies
         _db.FollowupItemDependencies.RemoveRange(f.DependentOn);

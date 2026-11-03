@@ -26,7 +26,7 @@ export function MeetingDateLabel({
   return (
     <span
       className={cn(
-        "inline-flex items-center gap-1.5 text-sm text-surface-500",
+        "inline-flex items-center gap-1.5 text-sm text-surface-500 dark:text-slate-200",
         className,
       )}
     >

@@ -45,6 +45,10 @@ export function useUpdateFollowup() {
                 waitingReason: request.waitingReason ?? null,
                 developmentNote: request.developmentNote ?? null,
                 dependencyItemIds: request.dependencyItemIds ?? [],
+                listId: request.listId ?? f.listId,
+                isFlagged: request.isFlagged ?? f.isFlagged,
+                isUrgent: request.isUrgent ?? f.isUrgent,
+                linkedFollowupId: request.linkedFollowupId !== undefined ? request.linkedFollowupId : f.linkedFollowupId,
               }
             : f,
         ),

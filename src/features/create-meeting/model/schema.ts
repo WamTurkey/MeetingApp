@@ -60,6 +60,11 @@ export const createMeetingSchema = z
 
 export type CreateMeetingFormData = z.infer<typeof createMeetingSchema>;
 
+export interface CreateMeetingParticipantInput {
+  personId: number;
+  role?: string;
+}
+
 /**
  * Convert validated form data into the API-ready MeetingCreatePayload.
  */
@@ -87,5 +92,6 @@ export function toMeetingPayload(data: CreateMeetingFormData) {
     copy_participants:
       data.previousMeetingId ? data.copy_participants : false,
     copyOpenTasks: data.previousMeetingId ? data.copyOpenTasks : false,
+    participants: [] as CreateMeetingParticipantInput[],
   };
 }

@@ -31,6 +31,11 @@ export interface FollowupItem extends BaseEntity {
   sourceMeetingId?: number;
   sourceMeetingTitle?: string;
   sourceMeetingDate?: string;
+  listId?: number | null;
+  listName?: string | null;
+  isFlagged?: boolean;
+  isUrgent?: boolean;
+  linkedFollowupId?: number | null;
   changeLog?: FollowupChangeLog[];
 }
 

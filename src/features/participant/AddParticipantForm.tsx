@@ -158,10 +158,7 @@ export function AddParticipantForm({
 
           <ComboBox
             label="Kişi Seçiniz"
-            placeholder={selectedCompanyId
-              ? `${companies.find(c => c.id === Number(selectedCompanyId))?.name ?? "Firma"} çalışanları...`
-              : "Aramak için yazmaya başlayın..."
-            }
+            placeholder="Kişi seçin"
             value={null}
             onChange={(val) => {
               if (val) {

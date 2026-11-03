@@ -5,20 +5,24 @@ import { EmptyState } from "@/shared/ui/EmptyState";
 import { useMeetingAttachments, useDeleteAttachment } from "@/entities/meeting/api/attachments";
 import { formatDateTime } from "@/shared/lib/formatDate";
 import { toast } from "sonner";
+import { cn } from "@/shared/lib/cn";
 import type { AttachmentDto } from "@/types/api";
 
 interface SavedVoiceNotesPanelProps {
   meetingId: number;
   editable?: boolean;
+  embedded?: boolean;
   onAddToNotes?: (text: string) => Promise<void> | void;
 }
 
 export function SavedVoiceNotesPanel({
   meetingId,
   editable = true,
+  embedded = false,
   onAddToNotes,
 }: SavedVoiceNotesPanelProps) {
-  const { data: voiceNotes = [], isLoading } = useMeetingAttachments(meetingId, "VOICE_NOTE");
+  const { data: allAttachments = [], isLoading } = useMeetingAttachments(meetingId);
+  const voiceNotes = allAttachments.filter((att) => att.mimeType.startsWith("audio/"));
   const deleteMutation = useDeleteAttachment(meetingId);
   const [addingNoteId, setAddingNoteId] = useState<number | null>(null);
 
@@ -51,6 +55,7 @@ export function SavedVoiceNotesPanel({
   };
 
   if (isLoading) {
+    if (embedded) return null;
     return (
       <div className="flex items-center justify-center py-16">
         <Loader2 className="h-7 w-7 animate-spin text-rose-500" />
@@ -59,29 +64,29 @@ export function SavedVoiceNotesPanel({
     );
   }
 
+  if (embedded && voiceNotes.length === 0) return null;
+
   return (
-    <div className="rounded-xl border border-border bg-bg-card p-5 shadow-sm space-y-4">
-      {/* Header */}
-      <div className="flex items-center justify-between border-b border-border-muted pb-4">
-        <div className="flex items-center gap-3">
-          <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-rose-500/10 text-rose-600 dark:bg-rose-950/50 dark:text-rose-400">
-            <Mic className="h-5 w-5" />
-          </div>
-          <div>
+    <div className={cn(
+      "min-w-0 max-w-full space-y-4",
+      !embedded && "rounded-xl border border-border bg-bg-card p-5 shadow-sm",
+    )}>
+      {!embedded && (
+        <div className="flex items-center justify-between border-b border-border-muted pb-4">
+          <div className="flex items-center gap-3">
+            <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-rose-500/10 text-rose-600 dark:bg-rose-950/50 dark:text-rose-400">
+              <Mic className="h-5 w-5" />
+            </div>
             <div className="flex items-center gap-2">
               <h3 className="font-semibold text-fg">Kaydedilen Sesli Notlar</h3>
               <span className="rounded-full bg-rose-50 px-2 py-0.5 text-xs font-semibold text-rose-700 dark:bg-rose-950/60 dark:text-rose-300">
                 {voiceNotes.length} Kayıt
               </span>
             </div>
-            <p className="text-xs text-surface-500 mt-0.5">
-              Toplantı esnasında kaydedilmiş ses kayıtları ve metin dökümleri bu alanda listelenmektedir.
-            </p>
           </div>
         </div>
-      </div>
+      )}
 
-      {/* List of Saved Voice Notes */}
       {voiceNotes.length === 0 ? (
         <EmptyState
           title="Henüz Kaydedilmiş Sesli Not Yok"
@@ -90,13 +95,13 @@ export function SavedVoiceNotesPanel({
       ) : (
         <div className="grid gap-4">
           {voiceNotes.map((att, index) => {
-            const audioSrc = `http://localhost:5180/api/meetings/${meetingId}/attachments/${att.id}/file`;
+            const audioSrc = att.url || `/api/meetings/${meetingId}/attachments/${att.id}/file`;
             const isAdding = addingNoteId === att.id;
 
             return (
               <div
                 key={att.id}
-                className="group relative rounded-xl border border-border bg-surface-50/40 p-4 transition-all hover:border-rose-300 hover:bg-white hover:shadow-xs dark:bg-surface-900/30 dark:hover:bg-surface-850"
+                className="group relative rounded-xl border border-border bg-surface-50/40 p-4 transition-all hover:border-rose-300 hover:bg-white hover:shadow-xs dark:border-white/10 dark:bg-slate-950/50 dark:hover:bg-slate-950/80"
               >
                 {/* Top Info */}
                 <div className="flex items-start justify-between gap-3 mb-3">
@@ -141,7 +146,7 @@ export function SavedVoiceNotesPanel({
 
                 {/* Transcribed Text if available */}
                 {att.description ? (
-                  <div className="rounded-lg border border-border/60 bg-white p-3.5 mb-3 shadow-2xs dark:bg-surface-800">
+                  <div className="mb-3 rounded-lg border border-border/60 bg-white p-3.5 shadow-2xs dark:border-white/10 dark:bg-slate-950/70">
                     <div className="text-2xs font-semibold uppercase tracking-wider text-rose-600 dark:text-rose-400 mb-1 flex items-center gap-1">
                       <Volume2 className="h-3 w-3" /> Metne Dönüştürülen Konuşma:
                     </div>

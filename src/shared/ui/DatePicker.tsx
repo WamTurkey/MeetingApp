@@ -46,6 +46,7 @@ export function DatePicker({
   const { refs, floatingStyles, context } = useFloating({
     open,
     onOpenChange: setOpen,
+    strategy: "fixed",
     middleware: [offset(4), flip(), shift({ padding: 8 })],
     whileElementsMounted: autoUpdate,
     placement: "bottom-start",
@@ -136,9 +137,9 @@ export function DatePicker({
         <FloatingPortal>
           <div
             ref={refs.setFloating}
-            style={floatingStyles}
             {...getFloatingProps()}
-            className="z-[100] rounded-xl border border-surface-200 bg-white p-3 shadow-xl dark:border-surface-700 dark:bg-surface-800"
+            style={{ ...floatingStyles, zIndex: 400 }}
+            className="rounded-xl border border-surface-200 bg-white p-3 shadow-xl dark:border-surface-700 dark:bg-surface-800"
           >
             <DayPicker
               mode="single"
