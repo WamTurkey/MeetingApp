@@ -22,8 +22,8 @@ interface GeminiResponse {
   };
 }
 
-/** 3.8 şu an yoğun; rapor kalitesi için 3.5 flash kullanılıyor. */
-const GEMINI_MODEL = "gemini-3.5-flash";
+/** Free-tier kotası dolunca 3.5-flash 429 veriyor; lite aynı anahtarla stabil. */
+const GEMINI_MODEL = "gemini-3.5-flash-lite";
 
 export function getGeminiApiKey(): string | undefined {
   const key = import.meta.env.VITE_GEMINI_API_KEY;
