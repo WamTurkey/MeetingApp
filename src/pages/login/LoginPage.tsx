@@ -45,6 +45,7 @@ export function LoginPage() {
 
       {/* ── Mesh Gradient Background ──────────────── */}
       <div className="pointer-events-none absolute inset-0" aria-hidden>
+        <div className="absolute inset-0 bg-slate-900/20 dark:bg-black/50" />
         <div className="absolute -left-20 -top-20 h-96 w-96 rounded-full bg-blue-400/30 blur-3xl dark:bg-blue-500/28" />
         <div className="absolute -bottom-20 -right-20 h-96 w-96 rounded-full bg-indigo-400/25 blur-3xl dark:bg-indigo-500/22" />
         <div className="absolute left-1/2 top-1/2 h-80 w-80 -translate-x-1/2 -translate-y-1/2 rounded-full bg-sky-300/20 blur-3xl dark:bg-sky-500/12" />
